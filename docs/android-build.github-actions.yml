@@ -3,13 +3,15 @@ name: Build Android APK
 on:
   push:
     branches:
-      - arena/01a043e4-nexora
       - main
+      - arena/01a04452-nexora
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Run web tests
+        run: npm test
+
       - name: Prepare web assets (www)
         run: |
           mkdir -p www
@@ -40,7 +45,6 @@ jobs:
       - name: Prepare Android SDK path
         run: |
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          echo "sdk.dir=$ANDROID_HOME"
 
       - name: Generate signing keystore
         run: |
@@ -64,7 +68,6 @@ jobs:
       - name: List APK output
         run: |
           ls -la android/app/build/outputs/apk/release/
-          echo "APP_NAME=إدارة البيانات" >> $GITHUB_ENV
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
@@ -73,7 +76,6 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release.apk
 
       - name: Create GitHub Release
-        if: github.ref == 'refs/heads/arena/01a043e4-nexora' || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0-android
@@ -88,3 +90,18 @@ jobs:
             **كيفية التثبيت:** حمّل ملف `app-release.apk` من الأسفل، ثم افتحه على هاتفك وفعّل «تثبيت من مصادر غير معروفة».
           files: android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
+
+      - name: Deliver APK via git branch (apk-delivery)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config http.https://github.com/.extraheader "Authorization: bearer $GITHUB_TOKEN"
+          git checkout --orphan apk-delivery
+          git rm -rf --quiet . || true
+          cp android/app/build/outputs/apk/release/app-release.apk ./app-release.apk
+          sha256sum app-release.apk > app-release.apk.sha256
+          git add app-release.apk app-release.apk.sha256
+          git commit -m "APK delivery — build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})"
+          git push -f origin HEAD:apk-delivery
