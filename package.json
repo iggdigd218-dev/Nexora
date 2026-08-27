@@ -1,0 +1,19 @@
+{
+  "name": "e4-data-accounting",
+  "version": "1.0.0",
+  "description": "إدارة البيانات — تطبيق محاسبي عربي متكامل (ويب + أندرويد)",
+  "private": true,
+  "scripts": {
+    "test": "node test/smoke.mjs && node test/dom.mjs",
+    "start": "node server.js",
+    "sync:android": "npm install && npx cap sync android",
+    "build:android": "cd android && ./gradlew assembleRelease"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^30.0.1"
+  }
+}

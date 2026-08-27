@@ -1,0 +1,14 @@
+{
+  "appId": "com.nexora.eradata",
+  "appName": "إدارة البيانات",
+  "webDir": "www",
+  "backgroundColor": "#0f766e",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0f766e"
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  }
+}

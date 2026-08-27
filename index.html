@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="description" content="نظام إدارة البيانات — تطبيق محاسبي عربي متكامل لإدارة الحسابات والعملاء والموردين والديون والعمليات المالية والسندات" />
+  <title>إدارة البيانات — النظام المحاسبي</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- شاشة القفل PIN -->
+  <div id="pin-lock" class="pin-lock hidden" dir="rtl">
+    <div class="pin-card">
+      <div class="pin-logo">📊</div>
+      <h1>إدارة البيانات</h1>
+      <p class="pin-sub">أدخل رمز PIN لفتح التطبيق</p>
+      <div class="pin-dots" id="pin-dots"></div>
+      <div class="pin-pad" id="pin-pad"></div>
+      <div class="pin-actions">
+        <button class="btn ghost" id="pin-back">رجوع</button>
+        <button class="btn primary" id="pin-ok" disabled>فتح</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- شاشة البداية / المقدمة -->
+  <div id="boot-screen" class="boot-screen hidden">
+    <div class="boot-card">
+      <div class="boot-logo">📊</div>
+      <h1>مرحباً بك في <span>إدارة البيانات</span></h1>
+      <p>النظام المحاسبي العربي المتكامل لإدارة الحسابات والديون والعملاء والموردين والسندات والتقارير</p>
+      <form id="boot-form" class="boot-form">
+        <div class="field">
+          <label>اسم النشاط أو المؤسسة</label>
+          <input type="text" id="boot-name" placeholder="مثال: مؤسسة النور التجارية" required />
+        </div>
+        <div class="field">
+          <label>العملة الرئيسية</label>
+          <select id="boot-currency">
+            <option value="YER">الريال اليمني (ر.ي)</option>
+            <option value="USD">الدولار الأمريكي ($)</option>
+            <option value="SAR">الريال السعودي (ر.س)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>رمز PIN (اختياري لحماية التطبيق)</label>
+          <input type="password" id="boot-pin" inputmode="numeric" maxlength="6" placeholder="اتركه فارغاً إن لم ترد" />
+        </div>
+        <button type="submit" class="btn primary block big">ابدأ الآن</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- لوحة التطبيق الرئيسية -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <button class="icon-btn" id="toggle-sidebar" aria-label="القائمة"><span class="ic">☰</span></button>
+      <div class="brand">
+        <div class="brand-logo">📊</div>
+        <div>
+          <div class="brand-title">إدارة البيانات</div>
+          <div class="brand-sub" id="brand-sub">النظام المحاسبي</div>
+        </div>
+      </div>
+      <div class="topbar-tools">
+        <button class="icon-btn" id="btn-search" title="بحث شامل"><span class="ic">🔍</span></button>
+        <button class="icon-btn" id="btn-hide-balance" title="إخفاء الأرصدة"><span class="ic" id="eye-ic">👁️</span></button>
+        <button class="icon-btn theme-btn" id="btn-theme" title="المظهر"><span class="ic" id="theme-ic">🌙</span></button>
+        <button class="icon-btn" id="btn-lock" title="قفل التطبيق"><span class="ic">🔒</span></button>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <nav class="nav">
+        <a href="#/dashboard" class="nav-item" data-route="dashboard"><span class="ic">📊</span><span>لوحة التحكم</span></a>
+        <a href="#/accounts" class="nav-item" data-route="accounts"><span class="ic">👥</span><span>الحسابات</span></a>
+        <a href="#/transactions" class="nav-item" data-route="transactions"><span class="ic">💸</span><span>العمليات المالية</span></a>
+        <a href="#/vouchers" class="nav-item" data-route="vouchers"><span class="ic">🧾</span><span>السندات</span></a>
+        <a href="#/reports" class="nav-item" data-route="reports"><span class="ic">📈</span><span>التقارير</span></a>
+        <a href="#/currencies" class="nav-item" data-route="currencies"><span class="ic">💱</span><span>العملات</span></a>
+        <a href="#/chat" class="nav-item" data-route="chat"><span class="ic">💬</span><span>المراسلات <span class="badge" id="chat-badge" hidden>0</span></span></a>
+        <a href="#/activity" class="nav-item" data-route="activity"><span class="ic">🕒</span><span>سجل النشاط</span></a>
+        <a href="#/users" class="nav-item" data-route="users"><span class="ic">🛡️</span><span>المستخدمون والصلاحيات</span></a>
+        <a href="#/backup" class="nav-item" data-route="backup"><span class="ic">💾</span><span>النسخ الاحتياطي</span></a>
+        <a href="#/settings" class="nav-item" data-route="settings"><span class="ic">⚙️</span><span>الإعدادات</span></a>
+      </nav>
+      <div class="sidebar-foot">
+        <button class="btn support" id="btn-support"><span class="ic">🛟</span> خدمة العملاء</button>
+      </div>
+    </aside>
+
+    <main class="main" id="view"></main>
+
+    <!-- زر إضافة سريع عائم -->
+    <div class="fab-wrap">
+      <button class="fab" id="fab-add" title="إضافة سريعة">＋</button>
+      <div class="fab-menu hidden" id="fab-menu">
+        <button class="fab-item" data-act="account"><span>👤</span> حساب</button>
+        <button class="fab-item" data-act="transaction"><span>💸</span> عملية</button>
+        <button class="fab-item" data-act="voucher"><span>🧾</span> سند</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# التبعيات
+node_modules/
+
+# مخرجات البناء
+www/
+android/app/build/
+android/build/
+android/.gradle/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties
+*.keystore
+*.jks
+
+# متفرقات
+package-lock.json
+.DS_Store
+*.log

@@ -1,0 +1,11 @@
+export * as dashboard from './dashboard.js';
+export * as accounts from './accounts.js';
+export * as transactions from './transactions.js';
+export * as vouchers from './vouchers.js';
+export * as reports from './reports.js';
+export * as currencies from './currencies.js';
+export * as chat from './chat.js';
+export * as activity from './activity.js';
+export * as users from './users.js';
+export * as backup from './backup.js';
+export * as settings from './settings.js';
