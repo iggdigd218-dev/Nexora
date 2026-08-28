@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      مهم: path_provider يحفظ في app_flutter/ وليس files/ لذا لا يكفي
+      files-path وحده. نُصدّر الملفات من cache/shared بعد نسخها إليه،
+      ونُبقي root-path كشبكة أمان لأي مسار داخلي آخر.
+    -->
+    <cache-path name="shared" path="shared/" />
+    <cache-path name="app_cache" path="." />
+    <files-path name="app_files" path="." />
+    <external-files-path name="ext_files" path="." />
+    <external-cache-path name="ext_cache" path="." />
+    <root-path name="internal" path="/data/" />
+</paths>
