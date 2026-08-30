@@ -194,7 +194,7 @@ function voucherHTML(v) {
         ${st.phone || st.whatsapp ? `<p>📞 ${esc([st.phone, st.whatsapp].filter(Boolean).join(' — '))}</p>` : ''}
         ${st.email ? `<p>✉️ ${esc(st.email)}</p>` : ''}
       </div>
-      <div class="v-logo">${st.logo ? `<img src="${st.logo}" alt="الشعار">` : '🏢'}</div>
+      <div class="v-logo">${st.logo ? `<img src="${esc(st.logo)}" alt="الشعار" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="v-logo-fallback" style="display:none">${esc(st.businessName || 'المؤسسة')}</span>` : `<span class="v-logo-fallback">${esc(st.businessName || 'المؤسسة')}</span>`}</div>
     </div>
     <div class="v-info">
       <div class="vi"><div class="k">التاريخ</div><div class="v">${esc(fmtDate(v.date, 'long'))}</div></div>

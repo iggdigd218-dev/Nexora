@@ -1,5 +1,6 @@
 export * as dashboard from './dashboard.js';
 export * as accounts from './accounts.js';
+export * as inventory from './inventory.js';
 export * as transactions from './transactions.js';
 export * as vouchers from './vouchers.js';
 export * as reports from './reports.js';

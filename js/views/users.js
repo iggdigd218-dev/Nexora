@@ -18,19 +18,21 @@ const PERMS = [
   { key: 'manage_backup', label: 'إدارة النسخ الاحتياطي' },
   { key: 'manage_users', label: 'إدارة المستخدمين' },
   { key: 'approve_vouchers', label: 'اعتماد/إلغاء السندات' },
+  { key: 'manage_inventory', label: 'إدارة المخزون والأصناف' },
 ];
 
 export const defaultPerms = (role) => {
   if (role === 'admin') return Object.fromEntries(PERMS.map(p => [p.key, true]));
-  if (role === 'accountant') return { add_tx:true, edit_tx:true, delete_tx:true, view_reports:true, export:true, approve_vouchers:true, manage_backup:false, manage_users:false };
-  if (role === 'dataentry') return { add_tx:true, edit_tx:true, delete_tx:false, view_reports:false, export:false, approve_vouchers:false, manage_backup:false, manage_users:false };
-  return { add_tx:false, edit_tx:false, delete_tx:false, view_reports:true, export:false, approve_vouchers:false, manage_backup:false, manage_users:false };
+  if (role === 'accountant') return { add_tx:true, edit_tx:true, delete_tx:true, view_reports:true, export:true, approve_vouchers:true, manage_backup:false, manage_users:false, manage_inventory:true };
+  if (role === 'dataentry') return { add_tx:true, edit_tx:true, delete_tx:false, view_reports:false, export:false, approve_vouchers:false, manage_backup:false, manage_users:false, manage_inventory:true };
+  return { add_tx:false, edit_tx:false, delete_tx:false, view_reports:true, export:false, approve_vouchers:false, manage_backup:false, manage_users:false, manage_inventory:false };
 };
 
 export function can(user, perm) {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  return !!((user.perms || {})[perm]);
+  const perms = user.perms || {};
+  return perms[perm] === undefined ? !!defaultPerms(user.role)[perm] : !!perms[perm];
 }
 export function currentUser() {
   return store.findBy('users', u => u.me) || store.findBy('users', u => u.role === 'admin') || null;

@@ -16,7 +16,7 @@ export function render(container, params, state) {
     <div class="grid grid-2">
       <div class="card">
         <div class="section-title">نسخة احتياطية محلية</div>
-        <p class="muted" style="margin-bottom:14px">إنشاء نسخة كاملة من كل بياناتك (الحسابات، العمليات، السندات، الإعدادات).</p>
+        <p class="muted" style="margin-bottom:14px">إنشاء نسخة كاملة من كل بياناتك (الحسابات، العمليات، السندات، الإعدادات). <span id="bk-size"></span></p>
         <button class="btn primary block big" data-backup>⬇️ إنشاء نسخة احتياطية الآن</button>
         <div class="divider"></div>
         <div class="section-title">استعادة نسخة</div>
@@ -55,11 +55,11 @@ export function render(container, params, state) {
   `;
 
   // الحجم
-  est.then(bytes => { if (bytes) container.querySelector('.muted b').textContent = ' (' + (bytes/1024).toFixed(1) + ' KB)'; });
+  est.then(bytes => { const size = $('#bk-size', container); if (size && bytes) size.textContent = 'حجم البيانات الحالي: ' + (bytes/1024).toFixed(1) + ' KB'; });
 
   container.addEventListener('click', async (e) => {
     if (e.target.closest('[data-backup]')) await doBackup();
-    if (e.target.closest('[data-restore]')) await doRestore();
+    if (e.target.closest('[data-restore]')) await doRestore(container, params, state);
     if (e.target.closest('[data-export]')) await doExport();
     if (e.target.closest('[data-del-bk]')) {
       const id = e.target.closest('[data-del-bk]').dataset.delBk;
@@ -112,7 +112,7 @@ async function doBackup() {
   toast('تم إنشاء النسخة الاحتياطية ✅');
 }
 
-async function doRestore() {
+async function doRestore(container, params, state) {
   const sel = $('#bk-list', container).value;
   if (!sel) { toastErr('اختر نسخة احتياطية أولاً'); return; }
   const bk = store.get('backups', sel);
@@ -122,6 +122,7 @@ async function doRestore() {
   await importAllData(bk.data);
   await store.load();
   toast('تمت الاستعادة بنجاح ✅');
+  render(container, params, state);
 }
 
 async function doExport() {

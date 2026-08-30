@@ -1,5 +1,5 @@
 // نقطة بداية التطبيق — التهيئة والتوجيه
-import { $, $$, esc, todayISO, uid } from './utils.js';
+import { $, $$, esc, fmt, todayISO, uid } from './utils.js';
 import { store } from './store.js';
 import { toast, toastErr, openModal, confirmDialog, readForm, handleAttachment } from './components.js';
 import { ACCOUNT_KINDS } from './accounting.js';
@@ -178,6 +178,9 @@ function finishStart() {
   state.currentUser = state.user;
   // قفل تلقائي إن فُعّل
   const st = store.settings();
+  state.hideBalance = !!st.hideBalances;
+  document.documentElement.dataset.hideBal = state.hideBalance ? '1' : '0';
+  document.documentElement.dataset.fontSize = st.fontSize || 'medium';
   if (st.pinEnabled && state.user.pin && st.autoLock) {
     state.locked = true;
     $('#pin-lock').classList.remove('hidden');
@@ -204,6 +207,7 @@ function setupGlobalHandlers() {
   };
   $('#btn-hide-balance').onclick = () => {
     state.hideBalance = !state.hideBalance;
+    store.setSetting('hideBalances', state.hideBalance);
     document.documentElement.dataset.hideBal = state.hideBalance ? '1' : '0';
     $$('.amount-display, .ac-balance .b-val, .tbl .amount').forEach(el => el.classList.toggle('hide', state.hideBalance));
     refreshTopbar();
@@ -260,6 +264,8 @@ function openGlobalSearch() {
       (t.desc + ' ' + t.ref + ' ' + (t.accountId || '')).toLowerCase().includes(term));
     const vouchers = store.col('vouchers').filter(v =>
       (v.number + ' ' + v.desc).toLowerCase().includes(term));
+    const items = store.col('items').filter(item =>
+      (item.name + ' ' + item.unit + ' ' + item.notes).toLowerCase().includes(term));
     const html = [];
     if (accounts.length) {
       html.push(`<div class="section-title">الحسابات (${accounts.length})</div>`);
@@ -276,11 +282,17 @@ function openGlobalSearch() {
       html.push(vouchers.slice(0, 8).map(v => `<div class="settings-row" data-open-voucher="${v.id}" style="cursor:pointer">
         <span>🧾 ${esc(v.number)}</span><span class="muted">${esc(v.date)}</span></div>`).join(''));
     }
+    if (items.length) {
+      html.push(`<div class="section-title">الأصناف (${items.length})</div>`);
+      html.push(items.slice(0, 8).map(item => `<div class="settings-row" data-open-inventory style="cursor:pointer">
+        <span>📦 <b>${esc(item.name)}</b></span><span class="muted">${esc(item.unit || 'حبة')} — ${fmt(item.quantity || 0)}</span></div>`).join(''));
+    }
     if (!html.length) html.push('<div class="empty"><div class="e-ic">🔍</div>لا توجد نتائج</div>');
     box.innerHTML = html.join('');
     $$('[data-open-account]', box).forEach(el => el.onclick = () => { m.close(); go('accounts', { id: el.dataset.openAccount }); });
     $$('[data-open-tx]', box).forEach(el => el.onclick = () => { m.close(); go('transactions', { id: el.dataset.openTx }); });
     $$('[data-open-voucher]', box).forEach(el => el.onclick = () => { m.close(); go('vouchers', { id: el.dataset.openVoucher }); });
+    $$('[data-open-inventory]', box).forEach(el => el.onclick = () => { m.close(); go('inventory'); });
   }
 }
 
@@ -295,7 +307,7 @@ export function openQuickTransaction() {
 // ---- إعادة العرض عند تغيير البيانات ----
 store.onChange((payload) => {
   if (state.locked) return;
-  if (location.hash && ['accounts','transactions','dashboard','vouchers','currencies','reports','chat'].includes(state.route)) {
+  if (location.hash && ['accounts','inventory','transactions','dashboard','vouchers','currencies','reports','chat'].includes(state.route)) {
     refreshTopbar();
   }
 });

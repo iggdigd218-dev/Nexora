@@ -64,7 +64,7 @@ try {
   ok('dashboard has stats', view.querySelectorAll('.stat-card').length >= 3);
 
   // التنقل عبر كل الشاشات
-  const routes = ['dashboard','accounts','transactions','vouchers','reports','currencies','chat','activity','users','backup','settings'];
+  const routes = ['dashboard','accounts','inventory','transactions','vouchers','reports','currencies','chat','activity','users','backup','settings'];
   for (const route of routes) {
     window.location.hash = '#/' + route;
     window.dispatchEvent(new window.HashChangeEvent('hashchange'));
@@ -106,6 +106,27 @@ try {
   await new Promise(r => setTimeout(r, 200));
     const acc = store.findBy('accounts', a => a.name === 'عميل الواجهة');
   ok('account created via UI', !!acc);
+
+  // 1.5) تفاصيل صنف وفاتورة: التخزين، نص واتساب، والسند مع الترويسة البديلة
+  const item = await store.save('items', { id: 'item-ui', name: 'قهوة عربية', unit: 'كرتون', quantity: 12, buyPrice: 80, sellPrice: 100, alertQty: 2, notes: '' });
+  ok('inventory item saved', item.name === 'قهوة عربية');
+  const { transactionText, receiptHTML } = await import('../js/views/transactions.js');
+  const featureTx = { id: 'feature-tx', accountId: acc.id, accountKind: 'customer', type: 'debit', amount: 200, currency: 'YER', date: '2026-04-01', time: '10:00', desc: 'بيع آجل', invoiceItems: [{ itemId: item.id, name: item.name, unit: item.unit, quantity: 2, unitPrice: 100, total: 200 }], status: 'completed', createdBy: 'المدير' };
+  const featureText = transactionText(featureTx);
+  const featureReceipt = receiptHTML(featureTx);
+  ok('WhatsApp text includes line details', featureText.includes('قهوة عربية') && featureText.includes('الكمية') && featureText.includes('سعر الوحدة') && featureText.includes('إجمالي البند') && featureText.includes('الإجمالي: 200'));
+  ok('receipt includes invoice table and fallback header', featureReceipt.includes('transaction-receipt') && featureReceipt.includes('<table>') && featureReceipt.includes('قهوة عربية') && featureReceipt.includes('إجمالي البند') && featureReceipt.includes('مؤسسة الاختبار'));
+  const savedFeature = await store.saveTransaction(featureTx);
+  ok('invoice lines stored separately', store.transactionItems(savedFeature.id).length === 1 && store.transactionItems(savedFeature.id)[0].itemId === item.id);
+  ok('stored line details render in text', transactionText(savedFeature).includes('قهوة عربية') && transactionText(savedFeature).includes('إجمالي البند'));
+  await store.setSetting('logo', 'data:image/png;base64,ZmFrZQ==');
+  ok('logo setting is reused in receipt', receiptHTML(featureTx).includes('data:image/png;base64,ZmFrZQ=='));
+  await store.setSetting('logo', '');
+  await store.deleteTransaction(savedFeature.id);
+  ok('invoice lines removed with transaction', store.transactionItems(savedFeature.id).length === 0);
+  const { exportAllData } = await import('../js/db.js');
+  const exported = await exportAllData();
+  ok('backup includes inventory items', exported.data.items.some(x => x.id === 'item-ui'));
 
   // 2) إنشاء عملية عبر واجهة العمليات
   window.location.hash = '#/transactions?new=1';

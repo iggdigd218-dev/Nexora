@@ -267,7 +267,39 @@ table.tbl{width:100%;border-collapse:collapse;min-width:560px}
 .tbl .amount{font-weight:800;white-space:nowrap}
 .tbl .amount.up{color:var(--green)}
 .tbl .amount.down{color:var(--danger)}
-.tbl .amount.hide{filter:blur(7px);user-select:none}
+.tbl .amount.hide,.amount-display.hide,.ac-balance .b-val.hide{filter:blur(7px);user-select:none}
+
+/* ============ المخزون وتفاصيل الفاتورة ============ */
+.logo-setting-preview{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.logo-setting-preview img{width:88px;height:88px;object-fit:contain;border:1px solid var(--border);border-radius:10px;background:#fff;padding:4px}
+.logo-setting-preview span{font-size:12px;color:var(--danger)}
+.invoice-box{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px;margin:4px 0 14px}
+.invoice-box-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+.invoice-line-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)}
+.invoice-line-main{flex:1;min-width:0}.invoice-line-main b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.invoice-line-main small{display:block;color:var(--text2);font-size:12px;margin-top:2px}
+.invoice-line-total{white-space:nowrap;color:var(--primary)}
+.icon-btn.sm{width:32px;height:32px;font-size:14px;padding:0}
+.invoice-total-row{display:flex;align-items:center;justify-content:flex-end;gap:10px;border-top:1px solid var(--border);padding-top:10px;margin-top:4px;font-weight:800;flex-wrap:wrap}
+.invoice-empty{color:var(--text3);font-size:12px;padding:8px 0}
+.invoice-send-hint{background:var(--primary-soft);color:var(--primary);border-radius:10px;padding:9px 11px;margin-top:8px}
+.invoice-details-view{margin-top:16px}
+.invoice-details-view tfoot td{background:var(--surface2);font-weight:800}
+
+/* ============ سند العملية المصوّر والطباعة ============ */
+.transaction-receipt{width:100%;max-width:820px;margin:0 auto;background:#fff;color:#111827;padding:28px;direction:rtl;font-family:Tahoma,Arial,sans-serif;border:1px solid #d1d5db;border-radius:10px}
+.receipt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;border-bottom:3px double #111827;padding-bottom:14px}
+.receipt-org{flex:1}.receipt-org h1{font-size:24px;margin:0 0 4px;color:#0f766e}.receipt-org p{font-size:12px;color:#4b5563;margin:2px 0}
+.receipt-logo{width:92px;height:92px;border:1px solid #9ca3af;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;text-align:center;padding:6px;flex:0 0 auto}.receipt-logo img{width:100%;height:100%;object-fit:contain}.receipt-logo-fallback{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:800;color:#0f766e}
+.receipt-title{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:16px 0 10px;font-size:20px}.receipt-title span{font-size:12px;color:#6b7280}
+.receipt-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;margin-bottom:16px}.receipt-meta>div{padding:9px;background:#f9fafb;border-inline-start:1px solid #d1d5db}.receipt-meta>div:first-child{border-inline-start:0}.receipt-meta small{display:block;color:#6b7280;font-size:11px}.receipt-meta b{display:block;font-size:14px;margin-top:3px}
+.transaction-receipt table{width:100%;border-collapse:collapse;font-size:12px}.transaction-receipt th,.transaction-receipt td{border:1px solid #9ca3af;padding:8px;text-align:right}.transaction-receipt th{background:#ecfdf5;color:#115e59}.transaction-receipt tfoot td{font-weight:800;background:#f3f4f6}
+.receipt-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px dashed #d1d5db;font-size:13px}.receipt-row span{color:#4b5563;font-weight:700}.receipt-row b{text-align:left}
+.receipt-grand{border:2px solid #111827;border-radius:8px;padding:13px;margin-top:18px}.receipt-grand>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:12px}.receipt-grand small{font-weight:700}.receipt-grand strong{font-size:28px}.receipt-words{border-top:1px solid #d1d5db;margin-top:7px;padding-top:7px;font-size:12px;font-weight:700}
+.receipt-footer{text-align:center;border-top:1px solid #d1d5db;margin-top:18px;padding-top:9px;color:#6b7280;font-size:11px}.receipt-generated{text-align:center;color:#9ca3af;font-size:10px;margin-top:7px}
+@media(max-width:640px){.receipt-meta{grid-template-columns:1fr}.invoice-total-row{justify-content:space-between}.transaction-receipt{padding:16px}.receipt-title{font-size:17px}}
+@media print{.transaction-receipt{border:none;border-radius:0;max-width:none;padding:0}.transaction-receipt *{color-adjust:exact;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+html[data-font-size="small"]{font-size:14px}html[data-font-size="medium"]{font-size:16px}html[data-font-size="large"]{font-size:18px}
 
 /* ============ أشرطة وأدوات ============ */
 .toolbar{
@@ -323,7 +355,7 @@ table.tbl{width:100%;border-collapse:collapse;min-width:560px}
 .voucher .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px double #333;padding-bottom:14px;gap:10px}
 .voucher .v-org{flex:1}
 .voucher .v-logo{width:80px;height:80px;border:1px solid #bbb;display:flex;align-items:center;justify-content:center;font-size:34px;border-radius:6px;overflow:hidden;background:#fff}
-.voucher .v-logo img{width:100%;height:100%;object-fit:contain}
+.voucher .v-logo img{width:100%;height:100%;object-fit:contain}.voucher .v-logo-fallback{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:12px;font-weight:800;color:#0f766e;text-align:center}
 .voucher .v-org h1{font-size:20px;margin:0}
 .voucher .v-org p{margin:2px 0;font-size:12px;color:#444}
 .voucher .v-badge{

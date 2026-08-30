@@ -26,6 +26,8 @@ export function render(container, params, state) {
             </select></div>
           <div class="settings-row"><div><div class="s-label">إخفاء الأرصدة في الشاشة الرئيسية</div><div class="s-desc">لا تظهر الأرقام إلا بالضغط</div></div>
             <label class="switch"><input type="checkbox" id="st-hidebal" ${s.hideBalances?'checked':''}><span class="slider"></span></label></div>
+          <div class="settings-row"><div><div class="s-label">حجم الخط</div><div class="s-desc">يُطبّق على واجهة التطبيق ويحفظ محليًا</div></div>
+            <select class="select" id="st-font-size"><option value="small" ${s.fontSize==='small'?'selected':''}>صغير</option><option value="medium" ${!s.fontSize || s.fontSize==='medium'?'selected':''}>متوسط</option><option value="large" ${s.fontSize==='large'?'selected':''}>كبير</option></select></div>
         </div>
 
         <div class="settings-group">
@@ -51,8 +53,9 @@ export function render(container, params, state) {
             <div class="field"><label>البريد</label><input id="st-email" value="${esc(s.email||'')}" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2)"></div>
           </div>
           <div class="field"><label>اسم المدير/المسؤول (يظهر في السندات)</label><input id="st-manager" value="${esc(s.managerName||'')}" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2)"></div>
-          <div class="field"><label>الشعار</label><input type="file" id="st-logo" accept="image/*">
-            ${s.logo ? `<div style="margin-top:8px"><img src="${s.logo}" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--border);border-radius:10px;background:#fff"></div>` : ''}</div>
+          <div class="field"><label>شعار المؤسسة</label><input type="file" id="st-logo" accept="image/*">
+            <div class="hint">يُحفظ الشعار محليًا مع الإعدادات ويظهر في كل سند جديد وصورة إيصال.</div>
+            ${s.logo ? `<div class="logo-setting-preview"><img src="${esc(s.logo)}" alt="معاينة شعار المؤسسة" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span hidden>تعذّر تحميل الشعار — ستُستخدم الترويسة النصية في السند.</span><button type="button" class="btn danger sm" id="st-logo-remove">🗑️ حذف الشعار</button></div>` : '<div class="hint">لا يوجد شعار محفوظ؛ ستظهر ترويسة المؤسسة النصية بدلًا منه.</div>'}</div>
           <div class="field"><label>العبارة السفلية في السند</label><input id="st-footer" value="${esc(s.voucherFooter || 'هذا السند آلي ولا يحتاج إلى ختم أو توقيع.')}" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2)"></div>
         </div>
       </div>
@@ -104,7 +107,15 @@ export function render(container, params, state) {
     applyThemeFromSettings(e.target.value);
     toast('تم تغيير المظهر');
   });
-  $('#st-hidebal', container).addEventListener('change', (e) => store.setSetting('hideBalances', e.target.checked));
+  $('#st-hidebal', container).addEventListener('change', (e) => {
+    store.setSetting('hideBalances', e.target.checked);
+    document.documentElement.dataset.hideBal = e.target.checked ? '1' : '0';
+  });
+  $('#st-font-size', container).addEventListener('change', (e) => {
+    store.setSetting('fontSize', e.target.value);
+    applyFontSize(e.target.value);
+    toast('تم تحديث حجم الخط');
+  });
   // مسميات
   ['st-label-oweThem','st-label-oweUs','st-default-op'].forEach(id => $('#'+id, container).addEventListener('change', (e) => {
     const key = { 'st-label-oweThem':'labelOweThem', 'st-label-oweUs':'labelOweUs', 'st-default-op':'defaultOp' }[id];
@@ -122,10 +133,24 @@ export function render(container, params, state) {
   $('#st-logo', container).addEventListener('change', async (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    const data = await handleAttachment(f, true);
-    await store.setSetting('logo', data);
-    toast('تم حفظ الشعار');
+    try {
+      const data = await handleAttachment(f, true);
+      if (!data) throw new Error('empty logo');
+      await store.setSetting('logo', data);
+      toast('تم حفظ الشعار محليًا وسيظهر في السندات والصور ✅');
+      render(container, params, state);
+    } catch (err) {
+      toastErr('تعذّر قراءة الشعار؛ لم تتأثر بيانات التطبيق');
+    }
   });
+  const removeLogo = $('#st-logo-remove', container);
+  if (removeLogo) removeLogo.onclick = async () => {
+    const ok = await confirmDialog({ title: 'حذف شعار المؤسسة', message: 'سيُحذف الشعار المحفوظ محليًا، وستستخدم السندات ترويسة نصية. متابعة؟', danger: true, confirmText: 'حذف الشعار' });
+    if (!ok) return;
+    await store.setSetting('logo', '');
+    toast('تم حذف الشعار؛ ستظهر الترويسة النصية في السندات');
+    render(container, params, state);
+  };
   ['st-prefix-receipt','st-prefix-payment'].forEach(id => $('#'+id, container).addEventListener('change', (e) => {
     const pre = store.settings().voucherPrefix || {};
     pre[id === 'st-prefix-receipt' ? 'receipt' : 'payment'] = e.target.value;
@@ -163,8 +188,8 @@ export function render(container, params, state) {
   $('#st-reset', container).onclick = async () => {
     const ok = await confirmDialog({ title: '⚠️ إعادة تعيين', message: 'سيتم حذف كل الحسابات والعمليات والسندات نهائياً. هذا الإجراء لا يمكن التراجع عنه!', danger: true, confirmText: 'حذف كل شيء' });
     if (!ok) return;
-    await dbClear('accounts'); await dbClear('transactions'); await dbClear('vouchers');
-    await dbClear('categories'); await dbClear('conversations'); await dbClear('messages');
+    await dbClear('accounts'); await dbClear('transactions'); await dbClear('transactionItems'); await dbClear('vouchers');
+    await dbClear('items'); await dbClear('categories'); await dbClear('conversations'); await dbClear('messages');
     await dbClear('backups'); await dbClear('activity');
     await store.load();
     toast('تمت إعادة التعيين');
@@ -175,4 +200,8 @@ export function render(container, params, state) {
 function applyThemeFromSettings(theme) {
   const t = theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
   document.documentElement.dataset.theme = t;
+}
+
+function applyFontSize(size) {
+  document.documentElement.dataset.fontSize = size || 'medium';
 }

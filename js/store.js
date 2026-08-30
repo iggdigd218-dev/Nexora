@@ -3,7 +3,7 @@ import * as db from './db.js';
 import { accountBalance, DEFAULT_CURRENCIES, opEffect } from './accounting.js';
 import { uid, nowStamp } from './utils.js';
 
-const STORES = ['settings','currencies','categories','accounts','transactions','vouchers',
+const STORES = ['settings','currencies','categories','accounts','transactions','transactionItems','vouchers','items',
   'conversations','messages','users','activity','templates','reminders','notifications','contacts','trash'];
 
 class Store {
@@ -100,8 +100,43 @@ class Store {
 
   // ---------- العمليات ----------
   transactions() { return this.list('transactions'); }
+  transactionItems(txId) {
+    return this.col('transactionItems')
+      .filter(item => String(item.txId) === String(txId))
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
+  async replaceTransactionItems(txId, items = []) {
+    const old = this.transactionItems(txId);
+    for (const item of old) await db.dbDelete('transactionItems', item.id);
+    this.state.transactionItems = this.col('transactionItems').filter(item => String(item.txId) !== String(txId));
+    const saved = [];
+    for (const [position, line] of items.entries()) {
+      const item = {
+        id: line.id || uid('txitem'),
+        txId,
+        position,
+        itemId: line.itemId || null,
+        name: String(line.name || ''),
+        unit: String(line.unit || 'حبة'),
+        quantity: Number(line.quantity) || 0,
+        unitPrice: Number(line.unitPrice) || 0,
+        total: Number.isFinite(Number(line.total)) ? Number(line.total) : (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0),
+        createdAt: line.createdAt || nowStamp(),
+      };
+      await db.dbPut('transactionItems', item);
+      this.state.transactionItems.push(item);
+      saved.push(item);
+    }
+    return saved;
+  }
   async saveTransaction(t) {
-    return this.create('transactions', t);
+    const saved = await this.create('transactions', t);
+    await this.replaceTransactionItems(saved.id, Array.isArray(saved.invoiceItems) ? saved.invoiceItems : []);
+    return saved;
+  }
+  async deleteTransaction(id, { silent = false } = {}) {
+    await this.remove('transactions', id, { silent });
+    await this.replaceTransactionItems(id, []);
   }
   // كشف العمليات المكررة (لتحذير المستخدم دون منعه)
   findDuplicates(t) {

@@ -174,7 +174,7 @@ function openTrash() {
     if (!ok) return;
     const id = b.dataset.forever;
     for (const t of store.filter('transactions', x => x.accountId === id || x.fromId === id || x.toId === id)) {
-      await store.remove('transactions', t.id, { silent: true });
+      await store.deleteTransaction(t.id, { silent: true });
     }
     await store.remove('accounts', id);
     toast('تم حذف الحساب نهائياً');

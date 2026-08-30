@@ -1,6 +1,6 @@
 // طبقة قاعدة البيانات — IndexedDB (تعمل دون إنترنت بشكل كامل)
 const DB_NAME = 'nexora_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -14,7 +14,7 @@ function openDB() {
         const s = db.createObjectStore('settings', { keyPath: 'key' });
         s.createIndex('by_key', 'key', { unique: true });
       }
-      ['accounts', 'transactions', 'vouchers', 'categories', 'currencies',
+      ['accounts', 'transactions', 'transactionItems', 'vouchers', 'categories', 'currencies', 'items',
        'conversations', 'messages', 'backups', 'activity', 'trash'].forEach((name) => {
         if (!db.objectStoreNames.contains(name)) {
           db.createObjectStore(name, { keyPath: 'id' });
@@ -87,7 +87,7 @@ export async function dbClearWithCount(store) {
 export async function resetAllData() {
   const db = await getDB();
   return new Promise((res, rej) => {
-    const names = ['accounts','transactions','vouchers','categories','currencies',
+    const names = ['accounts','transactions','transactionItems','vouchers','categories','currencies','items',
       'conversations','messages','backups','activity','trash','users','notifications',
       'audit','templates','reminders','contacts'];
     const t = db.transaction(names, 'readwrite');
@@ -107,7 +107,7 @@ export async function dbSize() {
 
 // تصدير كل البيانات ككائن
 export async function exportAllData() {
-  const stores = ['settings','currencies','categories','accounts','transactions','vouchers',
+  const stores = ['settings','currencies','categories','accounts','transactions','transactionItems','vouchers','items',
     'conversations','messages','users','activity','templates','reminders','notifications','contacts'];
   const out = { _version: DB_VERSION, _exportedAt: new Date().toISOString(), data: {} };
   for (const s of stores) out.data[s] = await dbGetAll(s);
@@ -116,7 +116,7 @@ export async function exportAllData() {
 
 // استيراد كل البيانات (مع تحذير)
 export async function importAllData(payload) {
-  const stores = ['settings','currencies','categories','accounts','transactions','vouchers',
+  const stores = ['settings','currencies','categories','accounts','transactions','transactionItems','vouchers','items',
     'conversations','messages','users','activity','templates','reminders','notifications','contacts'];
   await resetAllData();
   for (const s of stores) {
