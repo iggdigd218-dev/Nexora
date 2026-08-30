@@ -24,7 +24,9 @@ class ReceiptData {
   final double? balanceAfter;
   final String orgName;
   final String orgPhone;
+  final String logoPath;
   final String footer;
+  final List<InvoiceLine> items;
 
   const ReceiptData({
     required this.title,
@@ -38,7 +40,9 @@ class ReceiptData {
     this.balanceAfter,
     this.orgName = '',
     this.orgPhone = '',
+    this.logoPath = '',
     this.footer = '',
+    this.items = const [],
   });
 
   factory ReceiptData.fromTx({
@@ -47,9 +51,12 @@ class ReceiptData {
     required CurrencyDef currency,
     double? balanceAfter,
     required Map<String, String> settings,
+    List<InvoiceLine> items = const [],
   }) =>
       ReceiptData(
-        title: tx.type.label,
+        title: tx.type == OpType.debit && items.isNotEmpty
+            ? 'فاتورة مبيع آجل'
+            : tx.type.label,
         number: tx.reference,
         accountName: account?.name ?? '—',
         accountPhone: account?.phone ?? '',
@@ -60,7 +67,9 @@ class ReceiptData {
         balanceAfter: balanceAfter,
         orgName: settings['businessName'] ?? '',
         orgPhone: settings['phone'] ?? '',
+        logoPath: settings['logo'] ?? '',
         footer: settings['voucherFooter'] ?? '',
+        items: items,
       );
 }
 
@@ -75,6 +84,19 @@ Future<String> buildReceiptImage(ReceiptData d) async {
   // نقيس أولًا لنعرف الارتفاع المطلوب.
   final body = _lines(d);
   final height = 470.0 + body.length * 52.0 + (d.footer.isEmpty ? 0 : 60);
+
+  ui.Image? logo;
+  if (d.logoPath.trim().isNotEmpty) {
+    try {
+      final file = File(d.logoPath);
+      if (await file.exists()) {
+        final codec = await ui.instantiateImageCodec(await file.readAsBytes());
+        logo = (await codec.getNextFrame()).image;
+      }
+    } catch (_) {
+      // شعار غير صالح لا يمنع إنشاء السند؛ نتابع من دون صورة.
+    }
+  }
 
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, w, height));
@@ -103,6 +125,23 @@ Future<String> buildReceiptImage(ReceiptData d) async {
     topRight: const Radius.circular(28),
   );
   canvas.drawRRect(header, Paint()..color = AppColors.primary);
+
+  if (logo != null) {
+    final logoBox = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pad + 10, pad / 2 + 24, 82, 82),
+      const Radius.circular(14),
+    );
+    canvas.drawRRect(logoBox, Paint()..color = Colors.white);
+    final source = Rect.fromLTWH(
+        0, 0, logo!.width.toDouble(), logo!.height.toDouble());
+    final target = logoBox.outerRect.deflate(7);
+    canvas.drawImageRect(
+      logo!,
+      source,
+      target,
+      Paint()..filterQuality = ui.FilterQuality.high,
+    );
+  }
 
   var y = pad / 2 + 30.0;
   _text(canvas, d.orgName.isEmpty ? 'إدارة البيانات' : d.orgName,
@@ -179,6 +218,24 @@ List<(String, String)> _lines(ReceiptData d) {
   if (d.number.isNotEmpty) out.add(('رقم السند', d.number));
   if (d.accountPhone.isNotEmpty) out.add(('الهاتف', d.accountPhone));
   if (d.statement.isNotEmpty) out.add(('البيان', d.statement));
+  if (d.items.isNotEmpty) {
+    out.add(('تفاصيل المشتريات', ''));
+    for (var i = 0; i < d.items.length; i++) {
+      final line = d.items[i];
+      final price = Fmt.money(line.unitPrice, d.currency.decimal);
+      final total = Fmt.money(line.total, d.currency.decimal);
+      out.add((
+        'الصنف ${i + 1}',
+        '${line.name} — ${_quantity(line.quantity)} ${line.unit} × '
+            '$price ${d.currency.symbol} = $total ${d.currency.symbol}',
+      ));
+    }
+    final itemsTotal = d.items.fold<double>(0, (sum, line) => sum + line.total);
+    out.add((
+      'إجمالي المشتريات',
+      '${Fmt.money(itemsTotal, d.currency.decimal)} ${d.currency.symbol}',
+    ));
+  }
   if (d.balanceAfter != null) {
     final b = d.balanceAfter!;
     final label = b > 0 ? 'عليه' : (b < 0 ? 'له' : 'متساوٍ');
@@ -188,6 +245,9 @@ List<(String, String)> _lines(ReceiptData d) {
   if (d.orgPhone.isNotEmpty) out.add(('للتواصل', d.orgPhone));
   return out;
 }
+
+String _quantity(double value) =>
+    value == value.roundToDouble() ? Fmt.money(value) : Fmt.money(value, 2);
 
 void _text(
   Canvas canvas,
@@ -225,7 +285,8 @@ void _text(
   tp.paint(canvas, Offset(dx, y));
 }
 
-/// يحوّل بايتات صورة إلى ملف مؤقت (لصور العمليات المختارة من المعرض).
+/// يحوّل بايتات صورة إلى ملف دائم داخل مجلد مستندات التطبيق.
+/// يُستخدم للصور المختارة ولشعار المؤسسة حتى تبقى المسارات صالحة بعد إعادة التشغيل.
 Future<String> saveImageBytes(Uint8List bytes, {String prefix = 'img'}) async {
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/images')..createSync(recursive: true);

@@ -115,32 +115,77 @@ class Repo {
     return rows.map(Tx.fromMap).toList();
   }
 
-  Future<int> saveTx(Tx t) async {
+  /// يحفظ العملية وسطور الفاتورة معًا. تمرير [items] (حتى لو كانت فارغة)
+  /// يستبدل السطور القديمة، أما null فيُبقيها كما هي عند تحديث الصورة.
+  Future<int> saveTx(Tx t, {List<InvoiceLine>? items}) async {
     final db = await _db;
-    if (t.id == null) {
-      final id = await db.insert('transactions', t.toMap());
-      await logActivity('${t.type.label}: ${t.amount}', 'tx', '$id');
-      return id;
-    }
-    await db
-        .update('transactions', t.toMap(), where: 'id = ?', whereArgs: [t.id]);
-    await logActivity('تعديل عملية', 'tx', '${t.id}');
-    return t.id!;
+    late final int id;
+    await db.transaction((txn) async {
+      if (t.id == null) {
+        id = await txn.insert('transactions', t.toMap());
+      } else {
+        id = t.id!;
+        await txn.update('transactions', t.toMap(),
+            where: 'id = ?', whereArgs: [id]);
+      }
+
+      if (items != null) {
+        await txn.delete('transaction_items',
+            where: 'tx_id = ?', whereArgs: [id]);
+        for (final line in items) {
+          await txn.insert('transaction_items', line.toMap(transactionId: id));
+        }
+      }
+    });
+
+    await logActivity(
+      t.id == null ? '${t.type.label}: ${t.amount}' : 'تعديل عملية',
+      'tx',
+      '$id',
+    );
+    return id;
+  }
+
+  /// تفاصيل الأصناف المرتبطة بعملية مالية.
+  Future<List<InvoiceLine>> transactionItems(int txId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'transaction_items',
+      where: 'tx_id = ?',
+      whereArgs: [txId],
+      orderBy: 'id ASC',
+    );
+    return rows.map(InvoiceLine.fromMap).toList();
   }
 
   Future<void> deleteTx(int id) async {
     final db = await _db;
-    final r =
-        await db.query('transactions', where: 'id = ?', whereArgs: [id]);
-    if (r.isNotEmpty) {
-      await db.insert('trash', {
-        'store': 'transactions',
-        'payload': jsonEncode(r.first),
-        'label': 'عملية بمبلغ ${r.first['amount']} ${r.first['currency']}',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    }
-    await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      final rows =
+          await txn.query('transactions', where: 'id = ?', whereArgs: [id]);
+      if (rows.isNotEmpty) {
+        final lines = await txn.query(
+          'transaction_items',
+          where: 'tx_id = ?',
+          whereArgs: [id],
+          orderBy: 'id ASC',
+        );
+        await txn.insert('trash', {
+          'store': 'transactions',
+          'payload': jsonEncode({
+            'transaction': rows.first,
+            'items': lines,
+          }),
+          'label':
+              'عملية بمبلغ ${rows.first['amount']} ${rows.first['currency']}',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+      // الحذف الصريح يحافظ على السلوك نفسه حتى في قواعد الاختبار أو
+      // القواعد القديمة التي لم تُفعّل مفاتيح SQLite الأجنبية.
+      await txn.delete('transaction_items', where: 'tx_id = ?', whereArgs: [id]);
+      await txn.delete('transactions', where: 'id = ?', whereArgs: [id]);
+    });
     await logActivity('حذف عملية', 'tx', '$id');
   }
 
@@ -451,9 +496,26 @@ class Repo {
     if (r.isEmpty) return;
     final store = r.first['store'] as String;
     final payload =
-        jsonDecode(r.first['payload'] as String) as Map<String, Object?>;
-    await db.insert(store, payload,
-        conflictAlgorithm: ConflictAlgorithm.replace);
+        jsonDecode(r.first['payload'] as String) as Map<String, dynamic>;
+    if (store == 'transactions' && payload['transaction'] is Map) {
+      final tx = Map<String, Object?>.from(payload['transaction'] as Map);
+      final rawItems = payload['items'];
+      await db.transaction((txn) async {
+        await txn.insert('transactions', tx,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        if (rawItems is List) {
+          for (final raw in rawItems) {
+            if (raw is! Map) continue;
+            final item = Map<String, Object?>.from(raw);
+            await txn.insert('transaction_items', item,
+                conflictAlgorithm: ConflictAlgorithm.replace);
+          }
+        }
+      });
+    } else {
+      await db.insert(store, Map<String, Object?>.from(payload),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
     await db.delete('trash', where: 'id = ?', whereArgs: [trashId]);
     await logActivity('استرجاع من سلة المهملات', store, '$trashId');
   }
@@ -486,6 +548,7 @@ class Repo {
   static const backupTables = [
     'accounts',
     'transactions',
+    'transaction_items',
     'vouchers',
     'currencies',
     'categories',
@@ -506,10 +569,11 @@ class Repo {
     'users',
     'accounts',
     'transactions',
+    'items',
+    'transaction_items',
     'vouchers',
     'conversations',
     'messages',
-    'items',
     'stock_moves',
     'templates',
     'settings',
@@ -520,6 +584,7 @@ class Repo {
   static const _stableIdTables = [
     'accounts',
     'transactions',
+    'transaction_items',
     'vouchers',
     'categories',
     'users',
@@ -535,6 +600,8 @@ class Repo {
   static const _columnAliases = <String, String>{
     'accountId': 'account_id',
     'accountKind': 'account_kind',
+    'transactionId': 'tx_id',
+    'transaction_id': 'tx_id',
     'openingBalance': 'opening_balance',
     'fromId': 'from_id',
     'toId': 'to_id',
@@ -598,6 +665,31 @@ class Repo {
           }
         }
       }
+
+      // شعار المؤسسة محفوظ في settings.value، لذلك نضمّنه صراحةً في
+      // ملف النسخة حتى يظهر على السندات بعد النقل إلى جهاز آخر.
+      final settingsRows = data['settings'];
+      if (settingsRows is List) {
+        for (final row in settingsRows) {
+          if (row is! Map || row['key'] != 'logo') continue;
+          final path = (row['value'] ?? '') as String? ?? '';
+          if (path.isEmpty || images.containsKey(path)) continue;
+          try {
+            final f = File(path);
+            if (!f.existsSync()) {
+              throw StateError('شعار المؤسسة المشار إليه غير موجود: $path');
+            }
+            if (f.lengthSync() > 10 * 1024 * 1024) {
+              throw StateError('حجم شعار المؤسسة أكبر من 10 م.ب: $path');
+            }
+            images[path] = base64Encode(await f.readAsBytes());
+          } catch (e) {
+            throw StateError(
+              'تعذّر تضمين شعار المؤسسة $path؛ لم تُنشأ نسخة ناقصة: $e',
+            );
+          }
+        }
+      }
     }
 
     return {
@@ -638,6 +730,7 @@ class Repo {
           'conversations',
           'activity',
           'stock_moves',
+          'transaction_items',
           'items',
           'vouchers',
           'transactions',
@@ -681,6 +774,13 @@ class Repo {
                 entry.value,
                 remap,
               );
+            }
+            // مسار شعار المؤسسة يحتاج إعادة ربط مثل صور الحسابات والأصناف.
+            // إذا لم تُضمّن الصورة في النسخة نُفرغ المسار القديم بدل ترك رابطًا
+            // معطّلًا على الجهاز الجديد.
+            if (table == 'settings' && clean['key'] == 'logo') {
+              final oldPath = clean['value'];
+              clean['value'] = oldPath is String ? (remap[oldPath] ?? '') : '';
             }
             if (clean.isEmpty) {
               throw BackupImportException(
@@ -765,6 +865,7 @@ class Repo {
     final checks = <({String table, String column, String parent})>[
       (table: 'stock_moves', column: 'account_id', parent: 'accounts'),
       (table: 'vouchers', column: 'tx_id', parent: 'transactions'),
+      (table: 'transaction_items', column: 'item_id', parent: 'items'),
     ];
     for (final check in checks) {
       final rows = await db.rawQuery('''
@@ -900,6 +1001,12 @@ class Repo {
       'entries': 'transactions',
       'operations': 'transactions',
       'records': 'transactions',
+      'transaction_items': 'transaction_items',
+      'transactionitems': 'transaction_items',
+      'tx_items': 'transaction_items',
+      'txitems': 'transaction_items',
+      'invoice_items': 'transaction_items',
+      'invoiceitems': 'transaction_items',
       'vouchers': 'vouchers',
       'receipts': 'vouchers',
       'currencies': 'currencies',
@@ -987,6 +1094,9 @@ class Repo {
         'created_at': DateTime.now().toIso8601String(),
       });
     }
+    // تبقى سطور الفواتير التاريخية باسم الصنف حتى بعد حذفه من المخزون.
+    await db.update('transaction_items', {'item_id': null},
+        where: 'item_id = ?', whereArgs: [id]);
     await db.delete('items', where: 'id = ?', whereArgs: [id]);
     await logActivity('حذف صنف', 'item', '$id');
   }

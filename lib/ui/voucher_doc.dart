@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -16,6 +18,7 @@ class OrgInfo {
   final String phone;
   final String email;
   final String managerName;
+  final String logoPath;
   final String footer;
 
   const OrgInfo({
@@ -25,6 +28,7 @@ class OrgInfo {
     this.phone = '',
     this.email = '',
     this.managerName = '',
+    this.logoPath = '',
     this.footer = 'هذا السند آلي ولا يحتاج إلى ختم أو توقيع.',
   });
 
@@ -39,11 +43,24 @@ class OrgInfo {
             .join(' — '),
         email: s['email'] ?? '',
         managerName: s['managerName'] ?? '',
+        logoPath: s['logo'] ?? '',
         footer: s['voucherFooter']?.trim().isNotEmpty == true
             ? s['voucherFooter']!
             : 'هذا السند آلي ولا يحتاج إلى ختم أو توقيع.',
       );
 }
+
+pw.Widget _tableCell(String value, pw.Font? font) => pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        value,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(fontSize: 9, font: font),
+      ),
+    );
+
+String _quantity(double value) =>
+    value == value.roundToDouble() ? Fmt.money(value) : Fmt.money(value, 2);
 
 /// يبني ملف PDF بمقاس A4 للسند — نفس تخطيط `voucherHTML` في نسخة الويب.
 Future<Uint8List> buildVoucherPdf({
@@ -51,11 +68,24 @@ Future<Uint8List> buildVoucherPdf({
   required Account? account,
   required CurrencyDef currency,
   required OrgInfo org,
+  List<InvoiceLine> items = const [],
 }) async {
   final regular = pw.Font.ttf(
       await rootBundle.load('assets/fonts/Tajawal-Regular.ttf'));
   final bold =
       pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Bold.ttf'));
+
+  pw.MemoryImage? logo;
+  if (org.logoPath.trim().isNotEmpty) {
+    try {
+      final file = File(org.logoPath);
+      if (await file.exists()) {
+        logo = pw.MemoryImage(await file.readAsBytes());
+      }
+    } catch (_) {
+      // شعار غير صالح لا يمنع إنشاء السند.
+    }
+  }
 
   final doc = pw.Document();
   const teal = PdfColor.fromInt(0xFF0F766E);
@@ -154,6 +184,21 @@ Future<Uint8List> buildVoucherPdf({
                   ],
                 ),
               ),
+              if (logo != null) ...[
+                pw.Container(
+                  width: 62,
+                  height: 62,
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.white,
+                    border: pw.Border.all(color: border),
+                    borderRadius: pw.BorderRadius.circular(10),
+                  ),
+                  alignment: pw.Alignment.center,
+                  child: pw.Image(logo!, fit: pw.BoxFit.contain),
+                ),
+                pw.SizedBox(width: 8),
+              ],
               pw.Container(
                 width: 62,
                 height: 62,
@@ -197,7 +242,51 @@ Future<Uint8List> buildVoucherPdf({
               line('العملة', '${currency.name} (${currency.symbol})'),
             ]),
           ),
-          pw.SizedBox(height: 16),
+          if (items.isNotEmpty) ...[
+            pw.Text('تفاصيل المشتريات',
+                style: pw.TextStyle(fontSize: 13, font: bold, color: teal)),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(color: border, width: .6),
+              columnWidths: const {
+                0: pw.FlexColumnWidth(3.2),
+                1: pw.FlexColumnWidth(1.2),
+                2: pw.FlexColumnWidth(1.7),
+                3: pw.FlexColumnWidth(1.7),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: soft),
+                  children: [
+                    _tableCell('الصنف', bold),
+                    _tableCell('الكمية', bold),
+                    _tableCell('سعر الوحدة', bold),
+                    _tableCell('الإجمالي', bold),
+                  ],
+                ),
+                for (final line in items)
+                  pw.TableRow(children: [
+                    _tableCell(line.name, null),
+                    _tableCell('${_quantity(line.quantity)} ${line.unit}', null),
+                    _tableCell(
+                        '${Fmt.money(line.unitPrice, currency.decimal)} ${currency.symbol}',
+                        null),
+                    _tableCell(
+                        '${Fmt.money(line.total, currency.decimal)} ${currency.symbol}',
+                        bold),
+                  ]),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Align(
+              alignment: pw.AlignmentDirectional.centerEnd,
+              child: pw.Text(
+                'إجمالي المشتريات: ${Fmt.money(items.fold<double>(0, (sum, line) => sum + line.total), currency.decimal)} ${currency.symbol}',
+                style: pw.TextStyle(fontSize: 11, font: bold, color: teal),
+              ),
+            ),
+            pw.SizedBox(height: 16),
+          ],
 
           // صندوق المبلغ
           pw.Container(
@@ -278,6 +367,7 @@ String voucherText({
   required Account? account,
   required CurrencyDef currency,
   required String orgName,
+  List<InvoiceLine> items = const [],
 }) {
   final b = StringBuffer()
     ..writeln('📄 ${v.kind.label} رقم ${v.number}')
@@ -286,6 +376,20 @@ String voucherText({
     ..writeln(
         'المبلغ: ${Fmt.money(v.amount, currency.decimal)} ${currency.symbol}')
     ..writeln('البيان: ${v.statement.isEmpty ? '—' : v.statement}');
+  if (items.isNotEmpty) {
+    b.writeln('تفاصيل المشتريات:');
+    for (var i = 0; i < items.length; i++) {
+      final line = items[i];
+      b.writeln(
+        '${i + 1}. ${line.name} — ${_quantity(line.quantity)} ${line.unit} × '
+        '${Fmt.money(line.unitPrice, currency.decimal)} ${currency.symbol} = '
+        '${Fmt.money(line.total, currency.decimal)} ${currency.symbol}',
+      );
+    }
+    final total = items.fold<double>(0, (sum, line) => sum + line.total);
+    b.writeln(
+        'إجمالي المشتريات: ${Fmt.money(total, currency.decimal)} ${currency.symbol}');
+  }
   if (orgName.isNotEmpty) b.writeln(orgName);
   return b.toString();
 }

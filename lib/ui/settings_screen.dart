@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../core/models.dart';
+import '../core/receipt_image.dart';
 import '../core/security.dart';
 import '../core/theme.dart';
 import '../data/providers.dart';
@@ -36,6 +40,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _loaded = false;
   bool _bioSupported = false;
   String _bioLabel = '…';
+  String _logoPath = '';
+  bool _logoBusy = false;
 
   @override
   void initState() {
@@ -52,6 +58,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// نملأ الحقول مرة واحدة فقط حتى لا يُمحى ما يكتبه المستخدم عند التحديث.
   void _hydrate(Map<String, String> st) {
     if (_loaded) return;
+    _logoPath = st['logo'] ?? '';
     for (final f in _orgFields) {
       _ctrls[f.$1] = TextEditingController(text: st[f.$1] ?? '');
     }
@@ -79,17 +86,89 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  bool get _hasLogo =>
+      _logoPath.trim().isNotEmpty && File(_logoPath).existsSync();
+
+  Future<void> _pickLogo() async {
+    setState(() => _logoBusy = true);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 88,
+      );
+      if (picked == null) return;
+      final old = _logoPath;
+      final path = await saveImageBytes(
+        await picked.readAsBytes(),
+        prefix: 'logo',
+      );
+      await ref.read(repoProvider).setSetting('logo', path);
+      if (old.isNotEmpty && old != path) {
+        try {
+          final oldFile = File(old);
+          if (await oldFile.exists()) await oldFile.delete();
+        } catch (_) {
+          // لا نفشل حفظ الشعار الجديد بسبب ملف قديم غير قابل للحذف.
+        }
+      }
+      if (mounted) {
+        setState(() => _logoPath = path);
+        bump(ref);
+        showSnack(context, 'تم حفظ شعار المؤسسة ✅');
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر حفظ الشعار: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _logoBusy = false);
+    }
+  }
+
+  Future<void> _removeLogo() async {
+    if (_logoBusy) return;
+    setState(() => _logoBusy = true);
+    final old = _logoPath;
+    try {
+      await ref.read(repoProvider).setSetting('logo', '');
+      if (old.isNotEmpty) {
+        try {
+          final oldFile = File(old);
+          if (await oldFile.exists()) await oldFile.delete();
+        } catch (_) {
+          // لا نفشل حذف الإعداد بسبب ملف قديم غير قابل للحذف.
+        }
+      }
+      if (!mounted) return;
+      setState(() => _logoPath = '');
+      bump(ref);
+      showSnack(context, 'تم حذف شعار المؤسسة');
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر حذف الشعار: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _logoBusy = false);
+    }
+  }
+
   Future<void> _saveAll() async {
     setState(() => _saving = true);
-    final repo = ref.read(repoProvider);
-    for (final e in _ctrls.entries) {
-      await repo.setSetting(e.key, e.value.text.trim());
+    try {
+      final repo = ref.read(repoProvider);
+      for (final e in _ctrls.entries) {
+        await repo.setSetting(e.key, e.value.text.trim());
+      }
+      await repo.logActivity('حفظ الإعدادات', 'settings', '');
+      bump(ref);
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _dirty = false;
+      });
+      showSnack(context, 'تم حفظ الإعدادات ✅');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        showSnack(context, 'تعذّر حفظ الإعدادات: $e', error: true);
+      }
     }
-    await repo.logActivity('حفظ الإعدادات', 'settings', '');
-    bump(ref);
-    if (!mounted) return;
-    setState(() { _saving = false; _dirty = false; });
-    showSnack(context, 'تم حفظ الإعدادات ✅');
   }
 
   @override
@@ -158,7 +237,76 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           keyboard: f.$4,
                           maxLines: f.$5,
                         ),
-                      const SizedBox(height: 6),
+                      const Divider(height: 24),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          'شعار المؤسسة في السندات',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'أضف شعارك ليظهر تلقائيًا في صورة الإيصال وملف PDF.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.text2Of(context),
+                        ),
+                      ),
+                      if (_hasLogo) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              File(_logoPath),
+                              width: 96,
+                              height: 96,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 96,
+                                height: 96,
+                                color: AppColors.surface2Of(context),
+                                alignment: Alignment.center,
+                                child: Icon(Icons.broken_image_outlined,
+                                    color: AppColors.text3Of(context)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _logoBusy ? null : _pickLogo,
+                              icon: _logoBusy
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.image_outlined),
+                              label: Text(_hasLogo ? 'استبدال الشعار' : 'اختيار صورة'),
+                            ),
+                          ),
+                          if (_hasLogo) ...[
+                            const SizedBox(width: 8),
+                            IconButton(
+                              tooltip: 'حذف الشعار',
+                              onPressed: _logoBusy ? null : _removeLogo,
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: AppColors.dangerOf(context),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(

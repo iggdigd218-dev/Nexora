@@ -14,6 +14,9 @@ import '../data/providers.dart';
 import '../data/repository.dart';
 import 'widgets.dart';
 
+String _quantity(double value) =>
+    value == value.roundToDouble() ? Fmt.money(value) : Fmt.money(value, 2);
+
 /// توليد صورة إيصال العملية وإرسالها عبر واتساب.
 ///
 /// المسار كاملًا بلا نافذة مشاركة: تُولَّد الصورة، تُحفظ في العملية، ثم
@@ -27,6 +30,9 @@ class TxShare {
   }) async {
     final settings = await repo.settings();
     final currencies = await repo.currencies();
+    final items = tx.id == null
+        ? const <InvoiceLine>[]
+        : await repo.transactionItems(tx.id!);
     final cur = currencies.firstWhere(
       (c) => c.code == tx.currency,
       orElse: () => kDefaultCurrencies.first,
@@ -46,6 +52,7 @@ class TxShare {
       currency: cur,
       balanceAfter: after,
       settings: settings,
+      items: items,
     ));
 
     if (tx.id != null) {
@@ -67,15 +74,34 @@ class TxShare {
       (c) => c.code == tx.currency,
       orElse: () => kDefaultCurrencies.first,
     );
+    final items = tx.id == null
+        ? const <InvoiceLine>[]
+        : await repo.transactionItems(tx.id!);
     final lines = <String>[
       if (org.isNotEmpty) '*$org*',
-      '${tx.type.icon} ${tx.type.label}',
+      tx.type == OpType.debit && items.isNotEmpty
+          ? '🧾 فاتورة مبيع آجل'
+          : '${tx.type.icon} ${tx.type.label}',
       'الحساب: ${account?.name ?? '—'}',
-      'المبلغ: ${Fmt.money(tx.amount, cur.decimal)} ${cur.symbol}',
+      'المبلغ المسجل: ${Fmt.money(tx.amount, cur.decimal)} ${cur.symbol}',
       'التاريخ: ${Fmt.date(tx.date)}',
       if (tx.description.trim().isNotEmpty) 'البيان: ${tx.description.trim()}',
       if (tx.reference.trim().isNotEmpty) 'المرجع: ${tx.reference.trim()}',
     ];
+    if (items.isNotEmpty) {
+      lines.add('تفاصيل المشتريات:');
+      for (var i = 0; i < items.length; i++) {
+        final line = items[i];
+        lines.add(
+          '${i + 1}. ${line.name} — ${_quantity(line.quantity)} ${line.unit} × '
+          '${Fmt.money(line.unitPrice, cur.decimal)} ${cur.symbol} = '
+          '${Fmt.money(line.total, cur.decimal)} ${cur.symbol}',
+        );
+      }
+      final total = items.fold<double>(0, (sum, line) => sum + line.total);
+      lines.add(
+          'إجمالي المشتريات: ${Fmt.money(total, cur.decimal)} ${cur.symbol}');
+    }
     final footer = (st['voucherFooter'] ?? '').trim();
     if (footer.isNotEmpty) lines.add(footer);
     return lines.join('\n');
@@ -107,10 +133,30 @@ class TxShare {
       showSnack(context, 'جارٍ تجهيز الإيصال وفتح واتساب…');
     }
 
+    late final List<InvoiceLine> itemLines;
+    late final Map<String, String> currentSettings;
+    try {
+      itemLines = tx.id == null
+          ? const <InvoiceLine>[]
+          : await repo.transactionItems(tx.id!);
+      currentSettings = await repo.settings();
+    } catch (e) {
+      if (context.mounted) {
+        showSnack(context, 'تعذّر تحميل بيانات السند: $e', error: true);
+      }
+      return;
+    }
+    final hasLogo = (currentSettings['logo'] ?? '').trim().isNotEmpty;
+    final needsFreshReceipt =
+        tx.type == OpType.debit || itemLines.isNotEmpty || hasLogo;
+
     String path;
     try {
-      // نعيد استخدام الصورة المحفوظة إن كانت موجودة فعلًا على القرص.
-      if (tx.image.isNotEmpty && File(tx.image).existsSync()) {
+      // نعيد توليد إيصال المبلغ له دائمًا، وكذلك أي إيصال يحتوي أصنافًا أو
+      // شعارًا مفعّلًا، حتى لا نعيد إرسال صورة قديمة بعد تعديل العملية.
+      if (needsFreshReceipt) {
+        path = await generate(repo: repo, tx: tx, account: acc);
+      } else if (tx.image.isNotEmpty && File(tx.image).existsSync()) {
         path = tx.image;
       } else {
         path = await generate(repo: repo, tx: tx, account: acc);
@@ -132,12 +178,22 @@ class TxShare {
       return;
     }
 
-    final text = await caption(repo: repo, tx: tx, account: acc);
-    final res = await WhatsApp.send(
-      phone: phone,
-      text: text,
-      imagePath: path,
-    );
+    late final String text;
+    late final WaResult res;
+    try {
+      text = await caption(repo: repo, tx: tx, account: acc);
+      res = await WhatsApp.send(
+        phone: phone,
+        text: text,
+        imagePath: path,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        showSnack(context, 'تعذّر إرسال السند بالصورة والنص: $e',
+            error: true);
+      }
+      return;
+    }
 
     bump(ref);
     if (res == WaResult.imageFailed || res == WaResult.error) {
@@ -191,8 +247,22 @@ Future<void> showReceiptPreview(
   final acc = account ??
       (tx.accountId == null ? null : await repo.account(tx.accountId!));
   var path = tx.image;
-  if (path.isEmpty || !File(path).existsSync()) {
-    path = await TxShare.generate(repo: repo, tx: tx, account: acc);
+  final itemLines = tx.id == null
+      ? const <InvoiceLine>[]
+      : await repo.transactionItems(tx.id!);
+  final currentSettings = await repo.settings();
+  final hasLogo = (currentSettings['logo'] ?? '').trim().isNotEmpty;
+  final needsFreshReceipt =
+      tx.type == OpType.debit || itemLines.isNotEmpty || hasLogo;
+  try {
+    if (path.isEmpty || !File(path).existsSync() || needsFreshReceipt) {
+      path = await TxShare.generate(repo: repo, tx: tx, account: acc);
+    }
+  } catch (e) {
+    if (context.mounted) {
+      showSnack(context, 'تعذّر تجهيز صورة الإيصال: $e', error: true);
+    }
+    return;
   }
   if (!context.mounted) return;
 
@@ -235,11 +305,18 @@ Future<void> showReceiptPreview(
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       Navigator.pop(ctx);
-                      await TxShare.generate(
-                          repo: repo, tx: tx, account: acc);
-                      bump(ref);
-                      if (context.mounted) {
-                        showSnack(context, 'أُعيد توليد الصورة');
+                      try {
+                        await TxShare.generate(
+                            repo: repo, tx: tx, account: acc);
+                        bump(ref);
+                        if (context.mounted) {
+                          showSnack(context, 'أُعيد توليد الصورة');
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          showSnack(context, 'تعذّرت إعادة توليد الصورة: $e',
+                              error: true);
+                        }
                       }
                     },
                     icon: const Icon(Icons.refresh),

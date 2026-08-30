@@ -10,7 +10,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static Database? _db;
-  static const int _version = 2;
+  static const int _version = 3;
 
   static int get schemaVersion => _version;
 
@@ -215,6 +215,9 @@ class AppDatabase {
     await db.execute(createItemsSql);
     await db.execute(createStockSql);
     await db.execute('CREATE INDEX idx_stock_item ON stock_moves(item_id)');
+    await db.execute(createTransactionItemsSql);
+    await db.execute(
+        'CREATE INDEX idx_tx_items_tx ON transaction_items(tx_id)');
 
     // ---------- الإعدادات: مفتاح/قيمة كما في نسخة الويب ----------
     await db.execute('''
@@ -261,6 +264,22 @@ class AppDatabase {
         FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
       )''';
 
+  /// سطور الأصناف المرتبطة بالعملية؛ لا تُوضع داخل وصف حر حتى يمكن
+  /// إعادة عرضها كاملة في الإشعار والسند والصورة.
+  static const createTransactionItemsSql = '''
+      CREATE TABLE transaction_items (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        tx_id       INTEGER NOT NULL,
+        item_id     INTEGER,
+        name        TEXT NOT NULL,
+        unit        TEXT NOT NULL DEFAULT 'حبة',
+        quantity    REAL NOT NULL CHECK (quantity > 0),
+        unit_price  REAL NOT NULL CHECK (unit_price >= 0),
+        total       REAL NOT NULL CHECK (total >= 0),
+        FOREIGN KEY (tx_id) REFERENCES transactions (id) ON DELETE CASCADE,
+        FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE SET NULL
+      )''';
+
   /// ترقية المخطط مع الحفاظ على كل البيانات القائمة.
   static Future<void> _migrate(Database db, int from, int to) async {
     if (from < 2) {
@@ -270,6 +289,11 @@ class AppDatabase {
       // صورة واحدة لكل عملية + كلمة مرور المستخدم
       await _addColumn(db, 'transactions', 'image', "TEXT DEFAULT ''");
       await _addColumn(db, 'users', 'password', "TEXT DEFAULT ''");
+    }
+    if (from < 3) {
+      await db.execute(createTransactionItemsSql);
+      await db.execute(
+          'CREATE INDEX idx_tx_items_tx ON transaction_items(tx_id)');
     }
   }
 

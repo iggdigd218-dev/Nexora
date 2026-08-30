@@ -384,7 +384,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                       style: TextStyle(
                           fontSize: 13.5, fontWeight: FontWeight.w700)),
                   subtitle: const Text(
-                      'يجعل الملف أكبر لكنه ينقل الإيصالات معه إلى أي هاتف',
+                      'يجعل الملف أكبر لكنه ينقل الإيصالات والشعار معه إلى أي هاتف',
                       style: TextStyle(fontSize: 11.5)),
                   value: _withImages,
                   onChanged: (v) => setState(() => _withImages = v),

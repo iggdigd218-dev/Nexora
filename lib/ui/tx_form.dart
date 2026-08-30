@@ -62,6 +62,8 @@ class _TxFormState extends ConsumerState<TxForm> {
 
   List<Account> _accounts = [];
   List<CurrencyDef> _currencies = [];
+  List<Item> _inventoryItems = [];
+  List<InvoiceLine> _invoiceLines = [];
   bool _loading = true;
   bool _saving = false;
 
@@ -79,7 +81,11 @@ class _TxFormState extends ConsumerState<TxForm> {
     final repo = ref.read(repoProvider);
     final accs = await repo.accounts(includeArchived: true);
     final curs = await repo.currencies();
+    final stockItems = await repo.items(includeArchived: true);
     final t = widget.existing;
+    final invoiceLines = t?.id == null
+        ? const <InvoiceLine>[]
+        : await repo.transactionItems(t!.id!);
 
     if (t != null) {
       _type = t.type;
@@ -109,6 +115,8 @@ class _TxFormState extends ConsumerState<TxForm> {
       setState(() {
         _accounts = accs;
         _currencies = curs;
+        _inventoryItems = stockItems;
+        _invoiceLines = invoiceLines;
         _loading = false;
       });
     }
@@ -128,6 +136,13 @@ class _TxFormState extends ConsumerState<TxForm> {
       _accounts.where((a) => a.id == _accountId).firstOrNull;
 
   bool get _isTransfer => _type == OpType.transfer;
+
+  /// البيع الآجل يظهر كعملية مدين؛ تفاصيل الأصناف تبقى اختيارية حتى لا
+  /// تتعطل العمليات القديمة التي سُجلت بمبلغ ووصف فقط.
+  bool get _hasInvoiceDetails => _type == OpType.debit;
+
+  double get _invoiceTotal =>
+      _invoiceLines.fold<double>(0, (sum, line) => sum + line.total);
 
   /// نص الأثر المتوقّع — نفس تلميح نسخة الويب.
   String get _effectHint {
@@ -210,7 +225,10 @@ class _TxFormState extends ConsumerState<TxForm> {
       }
     }
 
-    final savedId = await repo.saveTx(tx);
+    final savedId = await repo.saveTx(
+      tx,
+      items: _hasInvoiceDetails ? _invoiceLines : const [],
+    );
     final saved = tx.copyWith(id: savedId);
     if (!mounted) return;
 
@@ -220,14 +238,25 @@ class _TxFormState extends ConsumerState<TxForm> {
     if (!_isTransfer && _accountId != null) {
       final acc = _account;
       if (_autoSend) {
-        await TxShare.sendNow(context, ref,
-            tx: saved, account: acc, silentIfNoPhone: false);
+        try {
+          await TxShare.sendNow(context, ref,
+              tx: saved, account: acc, silentIfNoPhone: false);
+        } catch (e) {
+          if (mounted) {
+            showSnack(context, 'تم حفظ العملية لكن تعذّر إرسال السند: $e',
+                error: true);
+          }
+        }
       } else {
         try {
           await TxShare.generate(repo: repo, tx: saved, account: acc);
           bump(ref);
-        } catch (_) {
-          // فشل توليد الصورة لا يبطل العملية المحفوظة.
+        } catch (e) {
+          // فشل توليد الصورة لا يبطل العملية المحفوظة، لكنه لا يُخفى.
+          if (mounted) {
+            showSnack(context, 'تم حفظ العملية لكن تعذّر توليد صورة السند: $e',
+                error: true);
+          }
         }
       }
     }
@@ -317,6 +346,10 @@ class _TxFormState extends ConsumerState<TxForm> {
                   _accountPickers(),
                   const SizedBox(height: 14),
                   _amountRow(),
+                  if (_hasInvoiceDetails) ...[
+                    const SizedBox(height: 14),
+                    _invoiceItemsSection(),
+                  ],
                   if (_type == OpType.settle) ...[
                     const SizedBox(height: 14),
                     _signPicker(),
@@ -506,6 +539,283 @@ class _TxFormState extends ConsumerState<TxForm> {
     } catch (e) {
       if (mounted) showSnack(context, 'تعذّر فتح الكاميرا', error: true);
     }
+  }
+
+  CurrencyDef get _selectedCurrency => _currencies.firstWhere(
+        (c) => c.code == _currency,
+        orElse: () => kDefaultCurrencies.first,
+      );
+
+  String _number(double value) => value == value.roundToDouble()
+      ? Fmt.money(value)
+      : Fmt.money(value, 2);
+
+  Widget _invoiceItemsSection() {
+    final c = _selectedCurrency;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface2Of(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderOf(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shopping_cart_outlined,
+                  size: 19, color: AppColors.primaryOf(context)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('تفاصيل المشتريات',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+              ),
+              TextButton.icon(
+                onPressed: _inventoryItems.isEmpty ? null : _addInvoiceLine,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('إضافة صنف'),
+              ),
+            ],
+          ),
+          Text(
+            'اختياري: اختر الأصناف ليظهر كل صنف وكميته وسعره في الإشعار والسند والصورة.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.text2Of(context)),
+          ),
+          if (_inventoryItems.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'لا توجد أصناف مسجلة. أضف بيانات الأصناف من «المخزون والأصناف» أولًا.',
+                style: TextStyle(
+                    fontSize: 12, color: AppColors.text3Of(context)),
+              ),
+            )
+          else if (_invoiceLines.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'لم تتم إضافة أصناف بعد.',
+                style: TextStyle(
+                    fontSize: 12, color: AppColors.text3Of(context)),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 10),
+            for (var i = 0; i < _invoiceLines.length; i++) ...[
+              if (i > 0) const Divider(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _invoiceLines[i].name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13.5, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${_number(_invoiceLines[i].quantity)} ${_invoiceLines[i].unit} × ${Fmt.money(_invoiceLines[i].unitPrice, c.decimal)} ${c.symbol}',
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.text2Of(context)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${Fmt.money(_invoiceLines[i].total, c.decimal)} ${c.symbol}',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primaryOf(context)),
+                  ),
+                  IconButton(
+                    tooltip: 'تعديل الصنف',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _editInvoiceLine(i),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                  ),
+                  IconButton(
+                    tooltip: 'حذف الصنف',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _invoiceLines.removeAt(i)),
+                    icon: Icon(Icons.delete_outline,
+                        size: 18, color: AppColors.dangerOf(context)),
+                  ),
+                ],
+              ),
+            ],
+            const Divider(height: 20),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('إجمالي المشتريات',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+                Text(
+                  '${Fmt.money(_invoiceTotal, c.decimal)} ${c.symbol}',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primaryOf(context)),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addInvoiceLine() => _editInvoiceLine();
+
+  Future<void> _editInvoiceLine([int? index]) async {
+    if (_inventoryItems.isEmpty) return;
+    final old = index == null ? null : _invoiceLines[index];
+    var itemId = old?.itemId;
+    if (!_inventoryItems.any((item) => item.id == itemId)) {
+      itemId = _inventoryItems.first.id;
+    }
+    final item = _inventoryItems.firstWhere((item) => item.id == itemId);
+    final quantity = TextEditingController(
+        text: old == null ? '1' : _number(old.quantity));
+    final price = TextEditingController(
+        text: old == null ? _number(item.sellPrice) : _number(old.unitPrice));
+    final formKey = GlobalKey<FormState>();
+
+    final line = await showDialog<InvoiceLine>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final selected = _inventoryItems.firstWhere(
+            (value) => value.id == itemId,
+            orElse: () => _inventoryItems.first,
+          );
+          return AlertDialog(
+            title: Text(old == null ? 'إضافة صنف للفاتورة' : 'تعديل الصنف'),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      value: itemId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'الصنف',
+                        prefixIcon: Icon(Icons.inventory_2_outlined),
+                      ),
+                      items: _inventoryItems
+                          .map((value) => DropdownMenuItem<int>(
+                                value: value.id,
+                                child: Text(value.name,
+                                    overflow: TextOverflow.ellipsis),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() {
+                          itemId = value;
+                          price.text = _number(_inventoryItems
+                              .firstWhere((item) => item.id == value)
+                              .sellPrice);
+                        });
+                      },
+                      validator: (value) => value == null ? 'اختر الصنف' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: quantity,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'الكمية',
+                        prefixIcon: Icon(Icons.numbers),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                      validator: (value) {
+                        final number = Fmt.parseAmount(value ?? '');
+                        return number == null || number <= 0
+                            ? 'أدخل كمية صحيحة'
+                            : null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: price,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'سعر الوحدة',
+                        prefixIcon: Icon(Icons.payments_outlined),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                      validator: (value) {
+                        final number = Fmt.parseAmount(value ?? '');
+                        return number == null || number < 0
+                            ? 'أدخل سعرًا صحيحًا'
+                            : null;
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'الإجمالي: ${Fmt.money((Fmt.parseAmount(quantity.text) ?? 0) * (Fmt.parseAmount(price.text) ?? 0), _selectedCurrency.decimal)} ${_selectedCurrency.symbol}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryOf(context)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) return;
+                  final q = Fmt.parseAmount(quantity.text)!;
+                  final p = Fmt.parseAmount(price.text)!;
+                  Navigator.pop(
+                    dialogContext,
+                    InvoiceLine(
+                      itemId: itemId,
+                      name: selected.name,
+                      unit: selected.unit,
+                      quantity: q,
+                      unitPrice: p,
+                    ),
+                  );
+                },
+                child: const Text('حفظ الصنف'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    quantity.dispose();
+    price.dispose();
+    if (line == null || !mounted) return;
+    setState(() {
+      if (index == null) {
+        _invoiceLines.add(line);
+      } else {
+        _invoiceLines[index] = line;
+      }
+    });
   }
 
   Widget _typeGrid() {

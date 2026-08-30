@@ -159,6 +159,69 @@ void main() {
       expect(await repo.balanceOf(a), 0);
     });
 
+    test('تفاصيل فاتورة المبيع تُحفظ مع العملية وتُحدّث ذريًا', () async {
+      final accountId = await repo.saveAccount(_acc());
+      final itemId = await repo.saveItem(Item(
+        name: 'هاتف',
+        unit: 'قطعة',
+        sellPrice: 250,
+        createdAt: _d(1),
+        updatedAt: _d(1),
+      ));
+      final txId = await repo.saveTx(
+        _tx(accountId: accountId, type: OpType.debit, amount: 500),
+        items: [
+          InvoiceLine(
+            itemId: itemId,
+            name: 'هاتف',
+            unit: 'قطعة',
+            quantity: 2,
+            unitPrice: 250,
+          ),
+        ],
+      );
+
+      var lines = await repo.transactionItems(txId);
+      expect(lines.length, 1);
+      expect(lines.single.total, 500);
+
+      await repo.saveTx(
+        _tx(id: txId, accountId: accountId, type: OpType.debit, amount: 250),
+        items: [
+          InvoiceLine(
+            itemId: itemId,
+            name: 'هاتف',
+            unit: 'قطعة',
+            quantity: 1,
+            unitPrice: 250,
+          ),
+        ],
+      );
+      lines = await repo.transactionItems(txId);
+      expect(lines.single.quantity, 1);
+      expect(lines.single.total, 250);
+    });
+
+    test('استرجاع عملية محذوفة يعيد معها تفاصيل الأصناف', () async {
+      final accountId = await repo.saveAccount(_acc());
+      final itemId = await repo.saveItem(Item(
+          name: 'دفتر', createdAt: _d(1), updatedAt: _d(1)));
+      final txId = await repo.saveTx(
+        _tx(accountId: accountId, type: OpType.debit, amount: 20),
+        items: [
+          InvoiceLine(
+              itemId: itemId,
+              name: 'دفتر',
+              quantity: 2,
+              unitPrice: 10),
+        ],
+      );
+      await repo.deleteTx(txId);
+      final trash = await repo.trash();
+      await repo.restoreFromTrash(trash.first['id'] as int);
+      expect((await repo.transactionItems(txId)).single.name, 'دفتر');
+    });
+
     test('التحويل ينعكس على طرفيه معًا', () async {
       final from = await repo.saveAccount(
           Account(name: 'من', createdAt: _d(1), updatedAt: _d(1)));
@@ -478,6 +541,26 @@ void main() {
       final after = await repo.accounts();
       expect(after.length, 1);
       expect(await repo.balanceOf(after.first), 150);
+    });
+
+    test('النسخة الاحتياطية تحفظ سطور الفاتورة وتعيدها', () async {
+      final accountId = await repo.saveAccount(_acc());
+      final itemId = await repo.saveItem(Item(
+          name: 'قلم', createdAt: _d(1), updatedAt: _d(1)));
+      final txId = await repo.saveTx(
+        _tx(accountId: accountId, type: OpType.debit, amount: 12),
+        items: [
+          InvoiceLine(itemId: itemId, name: 'قلم', quantity: 3, unitPrice: 4),
+        ],
+      );
+      final dump = await repo.exportAll(withImages: false);
+      final data = dump['data'] as Map<String, Object?>;
+      expect((data['transaction_items'] as List).length, 1);
+
+      await repo.importAll(dump);
+      final lines = await repo.transactionItems(txId);
+      expect(lines.single.name, 'قلم');
+      expect(lines.single.total, 12);
     });
 
     test('ملف غير صالح يُرفض', () async {

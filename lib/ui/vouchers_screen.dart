@@ -232,6 +232,9 @@ Future<void> openVoucherPreview(
 ) async {
   final repo = ref.read(repoProvider);
   final account = v.accountId == null ? null : await repo.account(v.accountId!);
+  final items = v.txId == null
+      ? const <InvoiceLine>[]
+      : await repo.transactionItems(v.txId!);
   final currencies = await repo.currencies();
   final currency = currencies.firstWhere(
     (c) => c.code == v.currency,
@@ -262,6 +265,7 @@ Future<void> openVoucherPreview(
                 account: account,
                 currency: currency,
                 org: org,
+                items: items,
               ),
               allowSharing: true,
               allowPrinting: true,
@@ -308,6 +312,7 @@ Future<void> openVoucherPreview(
                           account: account,
                           currency: currency,
                           orgName: org.name,
+                          items: items,
                         );
                         final uri = Uri.parse(
                             'https://wa.me/$number?text=${Uri.encodeComponent(text)}');

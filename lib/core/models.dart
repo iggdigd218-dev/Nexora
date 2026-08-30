@@ -282,6 +282,58 @@ class Tx {
       );
 }
 
+/// سطر صنف داخل فاتورة/عملية.
+///
+/// يُحفظ كسجل مستقل حتى تبقى تفاصيل البيع متاحة للنص والصورة والسند،
+/// وحتى لا تُختزل الفاتورة في حقل الوصف فقط.
+class InvoiceLine {
+  final int? id;
+  final int? txId;
+  final int? itemId;
+  final String name;
+  final String unit;
+  final double quantity;
+  final double unitPrice;
+  final double total;
+
+  const InvoiceLine({
+    this.id,
+    this.txId,
+    this.itemId,
+    required this.name,
+    this.unit = 'حبة',
+    required this.quantity,
+    required this.unitPrice,
+    double? total,
+  }) : total = total ?? quantity * unitPrice;
+
+  Map<String, Object?> toMap({int? transactionId}) => {
+        if (id != null) 'id': id,
+        'tx_id': transactionId ?? txId,
+        'item_id': itemId,
+        'name': name,
+        'unit': unit,
+        'quantity': quantity,
+        'unit_price': unitPrice,
+        'total': total,
+      };
+
+  factory InvoiceLine.fromMap(Map<String, Object?> m) {
+    final quantity = ((m['quantity'] ?? 0) as num).toDouble();
+    final unitPrice = ((m['unit_price'] ?? 0) as num).toDouble();
+    return InvoiceLine(
+      id: m['id'] as int?,
+      txId: m['tx_id'] as int?,
+      itemId: m['item_id'] as int?,
+      name: (m['name'] ?? '') as String,
+      unit: (m['unit'] ?? 'حبة') as String,
+      quantity: quantity,
+      unitPrice: unitPrice,
+      total: ((m['total'] ?? quantity * unitPrice) as num).toDouble(),
+    );
+  }
+}
+
 /// حساب مع رصيده المحسوب.
 class AccountWithBalance {
   final Account account;
