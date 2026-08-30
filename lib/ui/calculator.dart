@@ -74,7 +74,7 @@ class _CalculatorState extends State<_Calculator> {
           .replaceAll('÷', '/')
           .replaceAll('−', '-')
           .replaceAll(',', '');
-      final exp = Parser().parse(clean);
+      final exp = ShuntingYardParser().parse(clean);
       final v = exp.evaluate(EvaluationType.REAL, ContextModel());
       if (v is! double || v.isNaN || v.isInfinite) return null;
       return v;

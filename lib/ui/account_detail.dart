@@ -95,7 +95,7 @@ class AccountDetailScreen extends ConsumerWidget {
                             height: 46,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: AppColors.teal.withOpacity(0.12),
+                              color: AppColors.teal.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(a.kind.icon,
@@ -346,7 +346,7 @@ class _TxTile extends StatelessWidget {
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(tx.type.icon, style: const TextStyle(fontSize: 16)),

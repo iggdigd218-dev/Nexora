@@ -489,7 +489,7 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    value: _accountId,
+                    initialValue: _accountId,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'الحساب',
@@ -526,7 +526,7 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        value: _currencies.any((c) => c.code == _currency)
+                        initialValue: _currencies.any((c) => c.code == _currency)
                             ? _currency
                             : _currencies.first.code,
                         isExpanded: true,

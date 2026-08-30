@@ -88,7 +88,7 @@ class TrashScreen extends ConsumerWidget {
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: meta.$3.withOpacity(.12),
+                        backgroundColor: meta.$3.withValues(alpha: .12),
                         child: Icon(meta.$2, color: meta.$3),
                       ),
                       title: Text(

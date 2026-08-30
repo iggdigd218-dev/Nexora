@@ -542,7 +542,7 @@ class _TxFormState extends ConsumerState<TxForm> {
     return Column(
       children: [
         DropdownButtonFormField<int>(
-          value: _accountId,
+          initialValue: _accountId,
           isExpanded: true,
           decoration: InputDecoration(
             labelText: _isTransfer ? 'من حساب' : 'الحساب',
@@ -569,7 +569,7 @@ class _TxFormState extends ConsumerState<TxForm> {
         if (_isTransfer) ...[
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
-            value: _toId,
+            initialValue: _toId,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'إلى حساب',
@@ -633,7 +633,7 @@ class _TxFormState extends ConsumerState<TxForm> {
         Expanded(
           flex: 2,
           child: DropdownButtonFormField<String>(
-            value: _currencies.any((c) => c.code == _currency)
+            initialValue: _currencies.any((c) => c.code == _currency)
                 ? _currency
                 : (_currencies.isNotEmpty ? _currencies.first.code : null),
             isExpanded: true,
@@ -665,31 +665,33 @@ class _TxFormState extends ConsumerState<TxForm> {
   }
 
   Widget _signPicker() {
-    return Row(
-      children: [
-        Expanded(
-          child: RadioListTile<String>(
-            value: '+',
-            groupValue: _sign,
-            onChanged: (v) => setState(() => _sign = v!),
-            title: const Text('بالزيادة (+)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
+    return RadioGroup<String>(
+      groupValue: _sign,
+      onChanged: (v) {
+        if (v != null) setState(() => _sign = v);
+      },
+      child: Row(
+        children: [
+          Expanded(
+            child: RadioListTile<String>(
+              value: '+',
+              title: const Text('بالزيادة (+)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+            ),
           ),
-        ),
-        Expanded(
-          child: RadioListTile<String>(
-            value: '-',
-            groupValue: _sign,
-            onChanged: (v) => setState(() => _sign = v!),
-            title: const Text('بالنقصان (−)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
+          Expanded(
+            child: RadioListTile<String>(
+              value: '-',
+              title: const Text('بالنقصان (−)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -753,7 +755,7 @@ class _TxFormState extends ConsumerState<TxForm> {
       'cancelled': 'ملغاة',
     };
     return DropdownButtonFormField<String>(
-      value: _status,
+      initialValue: _status,
       decoration: const InputDecoration(
         labelText: 'حالة العملية',
         prefixIcon: Icon(Icons.flag_outlined),

@@ -146,7 +146,7 @@ class _FilterBar extends ConsumerWidget {
           selected: active,
           onSelected: (_) => onTap(),
           showCheckmark: false,
-          selectedColor: AppColors.teal.withOpacity(0.16),
+          selectedColor: AppColors.teal.withValues(alpha: 0.16),
           labelStyle: TextStyle(
             fontSize: 12.5,
             fontWeight: active ? FontWeight.w700 : FontWeight.w500,
@@ -155,7 +155,7 @@ class _FilterBar extends ConsumerWidget {
           backgroundColor: Theme.of(c).cardColor,
           side: BorderSide(
               color: active
-                  ? AppColors.teal.withOpacity(0.4)
+                  ? AppColors.teal.withValues(alpha: 0.4)
                   : Theme.of(c).dividerColor),
         ),
       );
@@ -205,7 +205,7 @@ class _AccountCard extends ConsumerWidget {
                       height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: kindColor.withOpacity(0.12),
+                        color: kindColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(11),
                       ),
                       child:

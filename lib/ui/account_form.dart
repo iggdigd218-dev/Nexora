@@ -208,7 +208,7 @@ class _State extends ConsumerState<AccountFormScreen> {
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
-                    value: _nature,
+                    initialValue: _nature,
                     decoration: const InputDecoration(labelText: 'الطبيعة'),
                     items: const [
                       DropdownMenuItem(
@@ -223,7 +223,7 @@ class _State extends ConsumerState<AccountFormScreen> {
             ),
             const SizedBox(height: 13),
             DropdownButtonFormField<String>(
-              value: curs.any((c) => c.code == _currency) ? _currency : null,
+              initialValue: curs.any((c) => c.code == _currency) ? _currency : null,
               decoration: const InputDecoration(labelText: 'العملة'),
               items: curs
                   .map((c) => DropdownMenuItem(

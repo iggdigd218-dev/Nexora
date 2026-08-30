@@ -99,7 +99,7 @@ class _UserCard extends ConsumerWidget {
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundColor: roleColor.withOpacity(.14),
+                backgroundColor: roleColor.withValues(alpha: .14),
                 child: Text(user.role.icon,
                     style: const TextStyle(fontSize: 18)),
               ),
@@ -272,7 +272,7 @@ class _UserFormState extends ConsumerState<_UserForm> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<UserRole>(
-                  value: _role,
+                  initialValue: _role,
                   decoration: const InputDecoration(
                     labelText: 'الدور',
                     prefixIcon: Icon(Icons.badge_outlined),

@@ -334,7 +334,7 @@ class _ConverterState extends ConsumerState<_Converter> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _from,
+                    initialValue: _from,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'من'),
                     items: widget.currencies
@@ -349,7 +349,7 @@ class _ConverterState extends ConsumerState<_Converter> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _to,
+                    initialValue: _to,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'إلى'),
                     items: widget.currencies

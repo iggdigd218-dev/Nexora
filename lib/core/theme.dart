@@ -90,8 +90,8 @@ class AppShadows {
   static List<BoxShadow> soft(bool dark) => [
         BoxShadow(
           color: dark
-              ? Colors.black.withOpacity(.35)
-              : const Color(0xFF0F1E32).withOpacity(.08),
+              ? Colors.black.withValues(alpha: .35)
+              : const Color(0xFF0F1E32).withValues(alpha: .08),
           blurRadius: 18,
           offset: const Offset(0, 4),
         ),
@@ -100,8 +100,8 @@ class AppShadows {
   static List<BoxShadow> large(bool dark) => [
         BoxShadow(
           color: dark
-              ? Colors.black.withOpacity(.5)
-              : const Color(0xFF0F1E32).withOpacity(.16),
+              ? Colors.black.withValues(alpha: .5)
+              : const Color(0xFF0F1E32).withValues(alpha: .16),
           blurRadius: 40,
           offset: const Offset(0, 14),
         ),
@@ -162,7 +162,7 @@ class AppTheme {
         labelLarge:
             const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -264,7 +264,7 @@ class AppTheme {
               size: 23,
             )),
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
         shape:

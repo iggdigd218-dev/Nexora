@@ -482,7 +482,7 @@ void main() {
 
     test('ملف غير صالح يُرفض', () async {
       expect(() => repo.importAll({'app': 'nexora'}),
-          throwsA(isA<FormatException>()));
+          throwsA(isA<BackupImportException>()));
     });
 
     test('الاسترجاع من سلة المهملات يعيد العملية', () async {

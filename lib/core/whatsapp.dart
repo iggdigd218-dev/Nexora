@@ -52,13 +52,11 @@ class WhatsApp {
       };
     } on MissingPluginException {
       // لا نستخدم رابط wa.me إذا كانت هناك صورة؛ الرابط لا يستطيع إرفاقها.
-      return imagePath == null
-          ? _fallback(digits, text)
-          : WaResult.imageFailed;
+      if (imagePath == null) return _fallback(digits, text);
+      return WaResult.imageFailed;
     } on PlatformException {
-      return imagePath == null
-          ? _fallback(digits, text)
-          : WaResult.imageFailed;
+      if (imagePath == null) return _fallback(digits, text);
+      return WaResult.imageFailed;
     }
   }
 
