@@ -11,9 +11,9 @@ import androidx.core.content.FileProvider;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.getcapacitor.annotation.PluginMethod;
 
 import java.io.File;
 import java.io.FileOutputStream;
