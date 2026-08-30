@@ -44,6 +44,8 @@ enum AppScreen {
   final IconData activeIcon;
 }
 
+enum _HomeMenuAction { settings }
+
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -121,6 +123,30 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       appBar: AppBar(
         title: Text(_screen.title),
         actions: [
+          // يفتح صفحة إعدادات التطبيق والنظام الموحدة؛ لا نفتح شاشة ثانية.
+          PopupMenuButton<_HomeMenuAction>(
+            tooltip: 'إعدادات التطبيق والنظام',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (action) {
+              switch (action) {
+                case _HomeMenuAction.settings:
+                  _go(AppScreen.settings);
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _HomeMenuAction.settings,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.settings_outlined),
+                    SizedBox(width: 10),
+                    Text('إعدادات التطبيق والنظام'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           IconButton(
             tooltip: hidden ? 'إظهار الأرصدة' : 'إخفاء الأرصدة',
             icon: Icon(hidden

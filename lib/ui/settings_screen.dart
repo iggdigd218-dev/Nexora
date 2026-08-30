@@ -112,6 +112,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ListView(
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 120),
               children: [
+                const SectionTitle('إعدادات التطبيق والنظام'),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySoftOf(context),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.tune_outlined,
+                            color: AppColors.primaryOf(context),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'جميع إعدادات Nexora في صفحة واحدة: بيانات المؤسسة، المحاسبة، المظهر، الأمان وترقيم السندات.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.6,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 const SectionTitle('بيانات المؤسسة'),
                 Card(
                   child: Padding(
