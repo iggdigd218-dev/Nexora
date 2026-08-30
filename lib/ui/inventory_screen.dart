@@ -8,14 +8,17 @@ import '../data/providers.dart';
 import 'calculator.dart';
 import 'widgets.dart';
 
-/// المخزون — الأصناف بسعر الشراء والبيع والربح والكمية المتبقية.
+/// شاشة بيانات الأصناف فقط.
+///
+/// تُستخدم لإدخال وتعديل بيانات الصنف وأسعاره وكميته وحذفه.
+/// لا تُسجّل شراءً أو بيعًا أو أي حركة مخزنية؛ تبقى هذه الشاشة مرجع
+/// البيانات الأساسية للأصناف فقط.
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(itemsProvider);
-    final summary = ref.watch(inventorySummaryProvider).valueOrNull ?? const {};
     final q = ref.watch(itemQueryProvider);
 
     return Column(
@@ -24,7 +27,7 @@ class InventoryScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
           child: TextField(
             decoration: InputDecoration(
-              hintText: 'ابحث باسم الصنف أو الرمز',
+              hintText: 'ابحث باسم الصنف أو الرمز أو التصنيف',
               prefixIcon: const Icon(Icons.search),
               isDense: true,
               suffixIcon: q.isEmpty
@@ -38,47 +41,6 @@ class InventoryScreen extends ConsumerWidget {
             onChanged: (v) => ref.read(itemQueryProvider.notifier).state = v,
           ),
         ),
-        // شريط الملخّص
-        SizedBox(
-          height: 104,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            children: [
-              _Mini(
-                title: 'الأصناف',
-                value: '${(summary['items'] ?? 0).toInt()}',
-                icon: Icons.inventory_2_outlined,
-                color: AppColors.teal,
-              ),
-              _Mini(
-                title: 'تكلفة المخزون',
-                value: Fmt.money(summary['cost'] ?? 0, 0),
-                icon: Icons.shopping_cart_outlined,
-                color: AppColors.info,
-              ),
-              _Mini(
-                title: 'الربح المتوقع',
-                value: Fmt.money(summary['expected'] ?? 0, 0),
-                icon: Icons.trending_up,
-                color: AppColors.green,
-              ),
-              _Mini(
-                title: 'الربح المحقق',
-                value: Fmt.money(summary['realised'] ?? 0, 0),
-                icon: Icons.savings_outlined,
-                color: AppColors.violet,
-              ),
-              _Mini(
-                title: 'نواقص',
-                value: '${(summary['low'] ?? 0).toInt()}',
-                icon: Icons.warning_amber_outlined,
-                color: AppColors.danger,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
         Expanded(
           child: items.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -92,71 +54,38 @@ class InventoryScreen extends ConsumerWidget {
                     icon: Icons.inventory_2_outlined,
                     title: q.isEmpty ? 'لا توجد أصناف بعد' : 'لا نتائج',
                     message: q.isEmpty
-                        ? 'أضف صنفًا بسعر شراء وسعر بيع لتتبّع الربح والكمية'
+                        ? 'أضف بيانات البضاعة وأسعارها من زر «صنف جديد»'
                         : 'جرّب كلمة بحث أخرى',
+                    action: q.isEmpty
+                        ? FilledButton.icon(
+                            onPressed: () => openItemForm(context, ref),
+                            icon: const Icon(Icons.add),
+                            label: const Text('إضافة صنف'),
+                          )
+                        : null,
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
-                    itemCount: list.length,
-                    itemBuilder: (_, i) => _ItemCard(item: list[i]),
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                        child: Text(
+                          '${list.length} صنف',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.text2Of(context),
+                          ),
+                        ),
+                      ),
+                      ...list.map((item) => _ItemCard(item: item)),
+                    ],
                   ),
           ),
         ),
       ],
     );
   }
-}
-
-class _Mini extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-  const _Mini({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 150,
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceOf(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.borderOf(context)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(children: [
-              Icon(icon, size: 17, color: color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.text2Of(context))),
-              ),
-            ]),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(value,
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w800, color: color)),
-            ),
-          ],
-        ),
-      );
 }
 
 class _ItemCard extends ConsumerWidget {
@@ -225,67 +154,46 @@ class _ItemCard extends ConsumerWidget {
               Row(
                 children: [
                   _Cell(
-                      label: 'شراء',
+                      label: 'سعر الشراء',
                       value: Fmt.money(item.buyPrice, 0),
                       color: AppColors.info),
                   _Cell(
-                      label: 'بيع',
+                      label: 'سعر البيع',
                       value: Fmt.money(item.sellPrice, 0),
                       color: AppColors.teal),
                   _Cell(
-                    label: 'الربح/وحدة',
-                    value: Fmt.money(item.unitProfit, 0),
-                    color: item.unitProfit >= 0
-                        ? AppColors.green
-                        : AppColors.danger,
-                    sub: item.buyPrice > 0
-                        ? '${item.marginPercent.toStringAsFixed(0)}٪'
-                        : null,
-                  ),
-                  _Cell(
-                    label: 'المتبقي',
+                    label: 'الكمية',
                     value: Fmt.money(item.quantity, 0),
                     color: warn,
+                    sub: item.minQuantity > 0
+                        ? 'حد التنبيه ${Fmt.money(item.minQuantity, 0)}'
+                        : null,
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          openStockMove(context, ref, item, StockKind.purchase),
-                      icon: const Icon(Icons.add_shopping_cart, size: 18),
-                      label: const Text('شراء'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () =>
-                          openStockMove(context, ref, item, StockKind.sale),
-                      icon: const Icon(Icons.sell_outlined, size: 18),
-                      label: const Text('بيع'),
-                    ),
+                  TextButton.icon(
+                    onPressed: () => openItemForm(context, ref, item: item),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('تعديل'),
                   ),
                   IconButton(
-                    tooltip: 'سجل الحركات',
-                    onPressed: () => _showMoves(context, ref),
-                    icon: const Icon(Icons.history),
-                  ),
-                  IconButton(
-                    tooltip: 'حذف',
+                    tooltip: 'حذف الصنف',
                     onPressed: () async {
-                      final ok = await confirmDialog(context,
-                          title: 'حذف الصنف',
-                          message:
-                              'سيُنقل «${item.name}» إلى سلة المهملات ويمكن استرجاعه.');
-                      if (!ok) return;
+                      final ok = await confirmDialog(
+                        context,
+                        title: 'حذف الصنف',
+                        message:
+                            'سيُنقل «${item.name}» إلى سلة المهملات ويمكن استرجاعه.',
+                      );
+                      if (!ok || item.id == null) return;
                       await ref.read(repoProvider).deleteItem(item.id!);
                       bump(ref);
                       if (context.mounted) {
-                        showSnack(context, 'نُقل إلى سلة المهملات');
+                        showSnack(context, 'نُقل الصنف إلى سلة المهملات');
                       }
                     },
                     icon: Icon(Icons.delete_outline,
@@ -296,90 +204,6 @@ class _ItemCard extends ConsumerWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showMoves(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => Consumer(
-        builder: (ctx, r, __) {
-          final moves = r.watch(stockMovesProvider(item.id!));
-          return DraggableScrollableSheet(
-            initialChildSize: .7,
-            expand: false,
-            builder: (_, controller) => Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(children: [
-                    Icon(Icons.history, color: AppColors.primaryOf(ctx)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text('حركات ${item.name}',
-                          style: Theme.of(ctx).textTheme.titleMedium),
-                    ),
-                    IconButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close)),
-                  ]),
-                ),
-                Expanded(
-                  child: moves.when(
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('$e')),
-                    data: (list) => list.isEmpty
-                        ? const EmptyState(
-                            icon: Icons.swap_vert,
-                            title: 'لا حركات على هذا الصنف',
-                          )
-                        : ListView.separated(
-                            controller: controller,
-                            itemCount: list.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final m = list[i];
-                              final inc = m.kind.qtySign > 0;
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: inc
-                                      ? AppColors.greenSoftOf(ctx)
-                                      : AppColors.dangerSoftOf(ctx),
-                                  child: Icon(
-                                    inc
-                                        ? Icons.arrow_downward
-                                        : Icons.arrow_upward,
-                                    color: inc
-                                        ? AppColors.greenOf(ctx)
-                                        : AppColors.dangerOf(ctx),
-                                  ),
-                                ),
-                                title: Text(
-                                    '${m.kind.label} · ${Fmt.money(m.quantity, 0)} ${item.unit}'),
-                                subtitle: Text(
-                                    '${Fmt.date(m.date)}  ·  الإجمالي ${Fmt.money(m.total, 0)}'),
-                                trailing: m.kind == StockKind.sale
-                                    ? Text(
-                                        Fmt.money(
-                                            m.profitAgainst(item.buyPrice), 0),
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            color: AppColors.greenOf(ctx)),
-                                      )
-                                    : null,
-                              );
-                            },
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
@@ -402,6 +226,7 @@ class _Cell extends StatelessWidget {
         child: Column(
           children: [
             Text(label,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 11.5, color: AppColors.text3Of(context))),
             const SizedBox(height: 3),
@@ -415,6 +240,9 @@ class _Cell extends StatelessWidget {
             ),
             if (sub != null)
               Text(sub!,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 10.5, color: color)),
           ],
         ),
@@ -662,7 +490,7 @@ class _ItemFormState extends ConsumerState<_ItemForm> {
   }
 }
 
-/// حقل مبلغ مع أيقونة آلة حاسبة تنقل الناتج إليه.
+/// حقل مبلغ مع آلة حاسبة سريعة.
 class _AmountField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -691,227 +519,6 @@ class _AmountField extends StatelessWidget {
               }
             },
           ),
-        ),
-      );
-}
-
-// ==================== حركة مخزنية ====================
-
-Future<void> openStockMove(
-        BuildContext context, WidgetRef ref, Item item, StockKind kind) =>
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => Padding(
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: _MoveForm(item: item, kind: kind),
-      ),
-    ).then((_) => bump(ref));
-
-class _MoveForm extends ConsumerStatefulWidget {
-  final Item item;
-  final StockKind kind;
-  const _MoveForm({required this.item, required this.kind});
-
-  @override
-  ConsumerState<_MoveForm> createState() => _MoveFormState();
-}
-
-class _MoveFormState extends ConsumerState<_MoveForm> {
-  late final TextEditingController _qty;
-  late final TextEditingController _price;
-  final _notes = TextEditingController();
-  late StockKind _kind;
-  DateTime _date = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _kind = widget.kind;
-    _qty = TextEditingController(text: '1');
-    _price = TextEditingController(text: _default());
-    for (final c in [_qty, _price]) {
-      c.addListener(() => setState(() {}));
-    }
-  }
-
-  String _default() {
-    final v = _kind == StockKind.sale
-        ? widget.item.sellPrice
-        : widget.item.buyPrice;
-    return v == 0 ? '' : (v == v.roundToDouble() ? '${v.toInt()}' : '$v');
-  }
-
-  @override
-  void dispose() {
-    _qty.dispose();
-    _price.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final q = Fmt.parseAmount(_qty.text) ?? 0;
-    if (q <= 0) {
-      showSnack(context, 'أدخل كمية صحيحة');
-      return;
-    }
-    final now = DateTime.now();
-    await ref.read(repoProvider).addStockMove(StockMove(
-          itemId: widget.item.id!,
-          kind: _kind,
-          quantity: q,
-          unitPrice: Fmt.parseAmount(_price.text) ?? 0,
-          notes: _notes.text.trim(),
-          date: _date,
-          createdAt: now,
-        ));
-    bump(ref);
-    if (mounted) Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final q = Fmt.parseAmount(_qty.text) ?? 0;
-    final p = Fmt.parseAmount(_price.text) ?? 0;
-    final total = q * p;
-    final profit = _kind == StockKind.sale
-        ? (p - widget.item.buyPrice) * q
-        : 0.0;
-    final after = _kind == StockKind.adjust
-        ? q
-        : widget.item.quantity + _kind.qtySign * q;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(children: [
-                Icon(Icons.swap_vert, color: AppColors.primaryOf(context)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('حركة على «${widget.item.name}»',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close)),
-              ]),
-              const SizedBox(height: 8),
-              SegmentedButton<StockKind>(
-                segments: const [
-                  ButtonSegment(value: StockKind.purchase, label: Text('شراء')),
-                  ButtonSegment(value: StockKind.sale, label: Text('بيع')),
-                  ButtonSegment(value: StockKind.ret, label: Text('مرتجع')),
-                  ButtonSegment(value: StockKind.adjust, label: Text('تسوية')),
-                ],
-                selected: {_kind},
-                showSelectedIcon: false,
-                onSelectionChanged: (s) => setState(() {
-                  _kind = s.first;
-                  _price.text = _default();
-                }),
-              ),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: _AmountField(
-                      controller: _qty,
-                      label: _kind == StockKind.adjust
-                          ? 'الكمية الصحيحة'
-                          : 'الكمية',
-                      icon: Icons.numbers),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _AmountField(
-                      controller: _price,
-                      label: 'سعر الوحدة',
-                      icon: Icons.payments_outlined),
-                ),
-              ]),
-              const SizedBox(height: 10),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.event_outlined),
-                title: const Text('التاريخ'),
-                subtitle: Text(Fmt.date(_date)),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () async {
-                  final d = await showDatePicker(
-                    context: context,
-                    initialDate: _date,
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime(2100),
-                  );
-                  if (d != null) setState(() => _date = d);
-                },
-              ),
-              TextField(
-                controller: _notes,
-                decoration: const InputDecoration(
-                    labelText: 'ملاحظات',
-                    prefixIcon: Icon(Icons.notes_outlined)),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surface2Of(context),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(children: [
-                  _row(context, 'الإجمالي', Fmt.money(total, 0)),
-                  if (_kind == StockKind.sale)
-                    _row(context, 'الربح المحقق', Fmt.money(profit, 0),
-                        color: profit >= 0
-                            ? AppColors.greenOf(context)
-                            : AppColors.dangerOf(context)),
-                  _row(context, 'الكمية بعد الحركة', Fmt.money(after, 0),
-                      color: after < 0 ? AppColors.dangerOf(context) : null),
-                ]),
-              ),
-              if (after < 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('تنبيه: الكمية ستصبح بالسالب',
-                      style: TextStyle(
-                          fontSize: 12, color: AppColors.dangerOf(context))),
-                ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.check),
-                  label: Text('تسجيل ${_kind.label}'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _row(BuildContext c, String k, String v, {Color? color}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Text(k,
-                style:
-                    TextStyle(fontSize: 13, color: AppColors.text2Of(c))),
-            const Spacer(),
-            Text(v,
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: color ?? AppColors.textOf(c))),
-          ],
         ),
       );
 }
