@@ -709,7 +709,7 @@ class _TxFormState extends ConsumerState<TxForm> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<int>(
-                      value: itemId,
+                      initialValue: itemId,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'الصنف',
