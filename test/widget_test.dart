@@ -688,4 +688,98 @@ void main() {
       expect((data['stock_moves'] as List).length, 1);
     });
   });
+
+  group('ذرّية استعادة النسخ', () {
+    late Repo repo;
+    late Directory tmp;
+    late Database db;
+
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('nexora_backup');
+      db = await databaseFactory.openDatabase(p.join(tmp.path, 'test.db'));
+      await AppDatabase.createSchema(db);
+      AppDatabase.overrideForTest(db);
+      repo = Repo();
+    });
+
+    tearDown(() async {
+      await db.close();
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+
+    test('ترتيب مفاتيح JSON لا يكسر علاقة العملية بالحساب', () async {
+      final n = await repo.importAll({
+        'app': 'nexora',
+        'format': 2,
+        'data': {
+          'transactions': [
+            {
+              'id': 20,
+              'account_id': 7,
+              'type': 'debit',
+              'amount': 250,
+              'date': '2026-08-01T00:00:00.000',
+              'created_at': '2026-08-01T00:00:00.000',
+              'updated_at': '2026-08-01T00:00:00.000',
+            },
+          ],
+          'accounts': [
+            {
+              'id': 7,
+              'name': 'حساب منقول',
+              'kind': 'customer',
+              'opening_balance': 100,
+              'currency': 'YER',
+              'created_at': '2026-08-01T00:00:00.000',
+              'updated_at': '2026-08-01T00:00:00.000',
+            },
+          ],
+        },
+      });
+      expect(n, 2);
+      final account = (await repo.account(7))!;
+      expect(account.name, 'حساب منقول');
+      expect(await repo.balanceOf(account), 350);
+    });
+
+    test('صف غير صالح يعيد قاعدة البيانات السابقة بالكامل', () async {
+      final oldId = await repo.saveAccount(_acc());
+      expect(oldId, 1);
+
+      await expectLater(
+        repo.importAll({
+          'app': 'nexora',
+          'format': 2,
+          'data': {
+            'accounts': [
+              {
+                'id': 9,
+                'name': 'حساب جديد',
+                'kind': 'customer',
+                'created_at': '2026-08-01T00:00:00.000',
+                'updated_at': '2026-08-01T00:00:00.000',
+              },
+            ],
+            'transactions': [
+              {
+                'id': 10,
+                'account_id': 9,
+                'type': 'debit',
+                'amount': 0,
+                'date': '2026-08-01T00:00:00.000',
+                'created_at': '2026-08-01T00:00:00.000',
+                'updated_at': '2026-08-01T00:00:00.000',
+              },
+            ],
+          },
+        }),
+        throwsA(isA<BackupImportException>()),
+      );
+
+      final accounts = await repo.accounts();
+      expect(accounts.length, 1);
+      expect(accounts.first.id, oldId);
+      expect(accounts.first.name, 'حساب');
+    });
+  });
 }

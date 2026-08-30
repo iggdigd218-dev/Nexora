@@ -1,12 +1,23 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../core/accounting.dart';
 import '../core/database.dart';
 import '../core/models.dart';
+
+/// خطأ استعادة واضح؛ لا تُعاد رسالة نجاح عند حدوثه.
+class BackupImportException implements Exception {
+  final String message;
+
+  const BackupImportException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 /// مستودع البيانات — كل قراءة وكتابة تمرّ من هنا.
 class Repo {
@@ -466,6 +477,12 @@ class Repo {
 
   // ==================== النسخ الاحتياطي ====================
 
+  /// الجداول الدائمة التي تدخل في النسخة.
+  ///
+  /// نُبقي `trash` و`notifications` خارج النسخة عمدًا: الأولى سجل محلي
+  /// للعناصر المحذوفة والثانية تنبيهات مشتقة/مؤقتة، ويُفرغان عند الاستعادة
+  /// حتى لا تظهر إحالات قديمة بعد استبدال قاعدة البيانات. أما `activity` و
+  /// `templates` فهما بيانات مفيدة للمستخدم ولذلك تُحفظ.
   static const backupTables = [
     'accounts',
     'transactions',
@@ -479,7 +496,62 @@ class Repo {
     'settings',
     'items',
     'stock_moves',
+    'templates',
   ];
+
+  /// ترتيب الإدخال مستقل عن ترتيب مفاتيح JSON، ويحافظ على المفاتيح الأجنبية.
+  static const _importOrder = [
+    'currencies',
+    'categories',
+    'users',
+    'accounts',
+    'transactions',
+    'vouchers',
+    'conversations',
+    'messages',
+    'items',
+    'stock_moves',
+    'templates',
+    'settings',
+    'activity',
+  ];
+
+  /// الجداول التي تعتمد على معرف SQLite ثابت عند نقل نسخة نكسورا.
+  static const _stableIdTables = [
+    'accounts',
+    'transactions',
+    'vouchers',
+    'categories',
+    'users',
+    'conversations',
+    'messages',
+    'activity',
+    'items',
+    'stock_moves',
+    'templates',
+  ];
+
+  /// أسماء أعمدة شائعة بصيغة camelCase في ملفات JSON.
+  static const _columnAliases = <String, String>{
+    'accountId': 'account_id',
+    'accountKind': 'account_kind',
+    'openingBalance': 'opening_balance',
+    'fromId': 'from_id',
+    'toId': 'to_id',
+    'buyPrice': 'buy_price',
+    'sellPrice': 'sell_price',
+    'minQuantity': 'min_quantity',
+    'conversationId': 'conversation_id',
+    'createdAt': 'created_at',
+    'updatedAt': 'updated_at',
+    'userName': 'user_name',
+    'refType': 'ref_type',
+    'refId': 'ref_id',
+    'isMe': 'is_me',
+    'itemId': 'item_id',
+    'unitPrice': 'unit_price',
+    'txId': 'tx_id',
+  };
 
   /// كل بيانات التطبيق في خريطة واحدة قابلة للتحويل إلى JSON.
   ///
@@ -491,8 +563,8 @@ class Repo {
     for (final t in backupTables) {
       try {
         data[t] = await db.query(t);
-      } catch (_) {
-        data[t] = const [];
+      } catch (e) {
+        throw StateError('تعذّر تصدير جدول $t؛ لم تُنشأ نسخة ناقصة: $e');
       }
     }
 
@@ -512,11 +584,17 @@ class Repo {
           if (path.isEmpty || images.containsKey(path)) continue;
           try {
             final f = File(path);
-            if (!f.existsSync()) continue;
-            if (f.lengthSync() > 3 * 1024 * 1024) continue; // نتجاهل الضخم
+            if (!f.existsSync()) {
+              throw StateError('الصورة المشار إليها غير موجودة: $path');
+            }
+            if (f.lengthSync() > 10 * 1024 * 1024) {
+              throw StateError('حجم الصورة أكبر من 10 م.ب: $path');
+            }
             images[path] = base64Encode(await f.readAsBytes());
-          } catch (_) {
-            // صورة مفقودة: نتخطاها بلا إفشال النسخة كلها
+          } catch (e) {
+            throw StateError(
+              'تعذّر تضمين الصورة $path؛ لم تُنشأ نسخة ناقصة: $e',
+            );
           }
         }
       }
@@ -532,111 +610,277 @@ class Repo {
     };
   }
 
-  /// يستبدل كل البيانات بمحتوى نسخة احتياطية.
+  /// يستبدل كل البيانات بمحتوى نسخة احتياطية ذرّيًا.
   ///
-  /// يقبل نسخ نكسورا (format 1 و 2) وكذلك نسخًا من تطبيقات حسابات أخرى
-  /// عبر [_normalize]، فيستورد ما يفهمه ويتجاهل الباقي بدل الرفض الكامل.
+  /// اختلاف ترتيب الجداول لا يؤثر؛ أما الصف غير الصالح أو المرجع المفقود
+  /// فيفشل العملية كلها ويعيد SQLite الحالة السابقة بدل استعادة جزئية صامتة.
   Future<int> importAll(Map<String, Object?> backup) async {
     final db = await _db;
     final data = _normalize(backup);
-    if (data.isEmpty) throw const FormatException('ملف غير صالح أو فارغ');
+    if (data.isEmpty) {
+      throw const BackupImportException(
+        'ملف غير صالح أو لا يحتوي جداول مفهومة.',
+      );
+    }
 
-    // نستعيد الصور المضمّنة أولًا ونبني خريطة المسار القديم ← الجديد.
-    final remap = await _restoreImages(backup);
+    // تفعيل المفاتيح الأجنبية أيضًا في قواعد الاختبار/القواعد المحقونة.
+    await db.execute('PRAGMA foreign_keys = ON');
+    final createdFiles = <File>[];
 
-    var imported = 0;
-    await db.transaction((txn) async {
-      for (final t in [
-        'messages',
-        'conversations',
-        'activity',
-        'stock_moves',
-        'items',
-        'vouchers',
-        'transactions',
-        'accounts',
-        'categories',
-        'users',
-        'currencies',
-        'settings',
-      ]) {
-        try {
-          await txn.delete(t);
-        } catch (_) {
-          // جدول غير موجود في هذه النسخة
+    try {
+      // الصور خارج SQLite، لذلك نسجل الملفات الجديدة ونحذفها إذا فشلت المعاملة.
+      final remap = await _restoreImages(backup, createdFiles);
+      final isNexora = backup['app'] == 'nexora';
+
+      return await db.transaction((txn) async {
+        for (final table in [
+          'messages',
+          'conversations',
+          'activity',
+          'stock_moves',
+          'items',
+          'vouchers',
+          'transactions',
+          'accounts',
+          'categories',
+          'users',
+          'currencies',
+          'settings',
+          'templates',
+          'trash',
+          'notifications',
+        ]) {
+          await txn.delete(table);
         }
-      }
 
-      for (final entry in data.entries) {
-        final table = entry.key;
-        final rows = entry.value;
-        final cols = await _columnsOf(txn, table);
-        if (cols.isEmpty) continue; // جدول لا نعرفه
-        for (final row in rows) {
-          // نُبقي الأعمدة المعروفة فقط حتى تُقبل ملفات التطبيقات الأخرى.
-          final clean = <String, Object?>{};
-          row.forEach((k, v) {
-            if (!cols.contains(k)) return;
-            clean[k] = (v is String && remap.containsKey(v)) ? remap[v] : v;
-          });
-          if (clean.isEmpty) continue;
-          try {
-            await txn.insert(table, clean,
-                conflictAlgorithm: ConflictAlgorithm.replace);
+        var imported = 0;
+        for (final table in _importOrder) {
+          final rows = data[table];
+          if (rows == null) continue;
+          final cols = await _columnsOf(txn, table);
+          if (cols.isEmpty) {
+            throw BackupImportException(
+              'جدول غير مدعوم أثناء الاستعادة: $table',
+            );
+          }
+
+          for (var index = 0; index < rows.length; index++) {
+            final row = rows[index];
+            final clean = <String, Object?>{};
+            for (final entry in row.entries) {
+              final column = _columnAliases[entry.key] ?? entry.key;
+              if (!cols.contains(column)) continue;
+              if (clean.containsKey(column)) {
+                throw BackupImportException(
+                  'الصف ${index + 1} في $table يحتوي العمود $column مرتين.',
+                );
+              }
+              clean[column] = _valueForDatabase(
+                table,
+                column,
+                entry.value,
+                remap,
+              );
+            }
+            if (clean.isEmpty) {
+              throw BackupImportException(
+                'الصف ${index + 1} في $table لا يحتوي أعمدة مفهومة.',
+              );
+            }
+            if (isNexora &&
+                _stableIdTables.contains(table) &&
+                (clean['id'] == null || !clean.containsKey('id'))) {
+              throw BackupImportException(
+                'الصف ${index + 1} في $table يفتقد المعرّف الثابت.',
+              );
+            }
+            if (isNexora &&
+                table == 'settings' &&
+                (clean['key'] == null || !clean.containsKey('key'))) {
+              throw BackupImportException(
+                'الصف ${index + 1} في settings يفتقد المفتاح.',
+              );
+            }
+
+            try {
+              await txn.insert(
+                table,
+                clean,
+                conflictAlgorithm: ConflictAlgorithm.abort,
+              );
+            } catch (e) {
+              throw BackupImportException(
+                'تعذّر استيراد الصف ${index + 1} من $table؛ أُلغيت الاستعادة بالكامل: $e',
+              );
+            }
             imported++;
-          } catch (_) {
-            // صف تالف: نتخطاه ونكمل
           }
         }
+
+        await _validateOptionalReferences(txn);
+        await txn.insert('activity', {
+          'text': 'استيراد نسخة احتياطية ($imported سجلًا)',
+          'ref_type': 'backup',
+          'ref_id': '',
+          'user_name': 'المدير',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        return imported;
+      });
+    } catch (e) {
+      await _deleteFiles(createdFiles);
+      if (e is BackupImportException) rethrow;
+      throw BackupImportException(
+        'فشلت الاستعادة بالكامل ولم تُطبّق أي تغييرات: $e',
+      );
+    }
+  }
+
+  /// يحوّل القيم إلى أنواع تقبلها sqflite، ويعيد ربط الصور.
+  Object? _valueForDatabase(
+    String table,
+    String column,
+    Object? value,
+    Map<String, String> remap,
+  ) {
+    if (_isImageColumn(table, column) && value is String && value.isNotEmpty) {
+      // النسخة بلا صورة مضمّنة لا تترك مسار الهاتف القديم معطّلًا.
+      return remap[value] ?? '';
+    }
+    if (value is bool) return value ? 1 : 0;
+    if (value == null || value is String || value is num) return value;
+    if (value is List<int>) return value;
+    throw BackupImportException(
+      'قيمة غير مدعومة في $table.$column؛ أُلغيت الاستعادة.',
+    );
+  }
+
+  bool _isImageColumn(String table, String column) =>
+      (table == 'transactions' &&
+          (column == 'image' || column == 'attachment')) ||
+      ((table == 'accounts' || table == 'items') && column == 'image');
+
+  /// يتحقق من العلاقات التي لم يفرضها المخطط صراحةً.
+  Future<void> _validateOptionalReferences(DatabaseExecutor db) async {
+    final checks = <({String table, String column, String parent})>[
+      (table: 'stock_moves', column: 'account_id', parent: 'accounts'),
+      (table: 'vouchers', column: 'tx_id', parent: 'transactions'),
+    ];
+    for (final check in checks) {
+      final rows = await db.rawQuery('''
+        SELECT COUNT(*) AS count
+        FROM ${check.table} child
+        WHERE child.${check.column} IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM ${check.parent} parent
+            WHERE parent.id = child.${check.column}
+          )
+      ''');
+      final count = (rows.first['count'] as num?)?.toInt() ?? 0;
+      if (count > 0) {
+        throw BackupImportException(
+          'وجدت $count إحالة غير صالحة في ${check.table}.${check.column}.',
+        );
       }
-    });
-    await logActivity('استيراد نسخة احتياطية ($imported سجلًا)', 'backup', '');
-    return imported;
+    }
   }
 
   /// أسماء أعمدة جدول، أو مجموعة فارغة إن لم يكن موجودًا.
   Future<Set<String>> _columnsOf(DatabaseExecutor db, String table) async {
-    try {
-      final info = await db.rawQuery('PRAGMA table_info($table)');
-      return info.map((c) => c['name'] as String).toSet();
-    } catch (_) {
-      return <String>{};
-    }
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    return info.map((c) => c['name'] as String).toSet();
   }
 
   /// يكتب الصور المضمّنة إلى القرص ويعيد خريطة المسار القديم ← الجديد.
-  Future<Map<String, String>> _restoreImages(Map<String, Object?> backup) async {
+  Future<Map<String, String>> _restoreImages(
+    Map<String, Object?> backup,
+    List<File> createdFiles,
+  ) async {
     final raw = backup['images'];
-    if (raw is! Map || raw.isEmpty) return const {};
+    if (raw == null) return const {};
+    if (raw is! Map) {
+      throw const BackupImportException('حقل images في النسخة غير صالح.');
+    }
+    if (raw.isEmpty) return const {};
+
     final out = <String, String>{};
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final folder = Directory('${dir.path}/images')
-        ..createSync(recursive: true);
-      var i = 0;
-      for (final e in raw.entries) {
-        final b64 = e.value;
-        if (b64 is! String || b64.isEmpty) continue;
-        try {
-          final name = 'restored-${DateTime.now().millisecondsSinceEpoch}-${i++}.png';
-          final f = File('${folder.path}/$name');
-          await f.writeAsBytes(base64Decode(b64), flush: true);
-          out['${e.key}'] = f.path;
-        } catch (_) {
-          // صورة تالفة: نتجاهلها
-        }
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory('${dir.path}/images');
+    await folder.create(recursive: true);
+    var i = 0;
+
+    for (final entry in raw.entries) {
+      final oldPath = '${entry.key}';
+      final b64 = entry.value;
+      if (oldPath.isEmpty || b64 is! String || b64.isEmpty) {
+        throw const BackupImportException('توجد صورة مضمّنة ناقصة أو فارغة.');
       }
-    } catch (_) {
-      return const {};
+      if (out.containsKey(oldPath)) {
+        throw BackupImportException('مسار صورة مكرر في النسخة: $oldPath');
+      }
+
+      late final List<int> bytes;
+      try {
+        bytes = base64Decode(b64);
+      } catch (e) {
+        throw BackupImportException(
+          'ترميز الصورة غير صالح للمسار $oldPath: $e',
+        );
+      }
+      if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+        throw BackupImportException('حجم الصورة غير صالح للمسار: $oldPath');
+      }
+      final extension = _imageExtension(oldPath);
+      final name =
+          'restored-${DateTime.now().millisecondsSinceEpoch}-${i++}$extension';
+      final file = File('${folder.path}/$name');
+      createdFiles.add(file);
+      try {
+        await file.writeAsBytes(bytes, flush: true);
+      } catch (e) {
+        throw BackupImportException('تعذّر حفظ الصورة $oldPath: $e');
+      }
+      out[oldPath] = file.path;
     }
     return out;
   }
 
+  String _imageExtension(String path) {
+    final extension = p.extension(path).toLowerCase();
+    return const {
+          '.png',
+          '.jpg',
+          '.jpeg',
+          '.webp',
+          '.gif',
+          '.heic',
+          '.pdf',
+          '.mp4',
+          '.mov',
+          '.doc',
+          '.docx',
+          '.xls',
+          '.xlsx',
+        }.contains(extension)
+        ? extension
+        : '.png';
+  }
+
+  Future<void> _deleteFiles(Iterable<File> files) async {
+    for (final file in files) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // لا نغيّر رسالة فشل المعاملة بسبب ملف مؤقت يتعذر حذفه.
+      }
+    }
+  }
+
   /// يحوّل أي ملف نسخ احتياطي إلى `{جدول: [صفوف]}`.
   ///
-  /// يدعم ثلاث صيغ شائعة: `{data:{...}}` (نكسورا)، الخريطة المسطّحة
-  /// `{accounts:[...], transactions:[...]}` وأسماء جداول مرادفة يستعملها
-  /// غيرنا مثل `customers` أو `entries`.
+  /// يدعم `{data:{...}}` (نكسورا)، والخريطة المسطّحة، وأسماء مرادفة مثل
+  /// `customers` و`entries`. القوائم الفارغة تبقى موجودة حتى تُقبل نسخة
+  /// صحيحة لا تحتوي سجلات بعد.
   Map<String, List<Map<String, Object?>>> _normalize(Map<String, Object?> b) {
     Map? src;
     final d = b['data'];
@@ -669,17 +913,26 @@ class Repo {
       'products': 'items',
       'inventory': 'items',
       'stock_moves': 'stock_moves',
+      'stockmoves': 'stock_moves',
+      'templates': 'templates',
     };
 
     final out = <String, List<Map<String, Object?>>>{};
     src.forEach((k, v) {
-      final table = alias[('$k').toLowerCase()];
-      if (table == null || v is! List) return;
+      final table = alias['$k'.toLowerCase()];
+      if (table == null) return;
+      if (v is! List) {
+        throw BackupImportException('جدول $table ليس قائمة صفوف صالحة.');
+      }
       final rows = <Map<String, Object?>>[];
       for (final r in v) {
-        if (r is Map) rows.add(r.map((a, b) => MapEntry('$a', b)));
+        if (r is! Map) {
+          throw BackupImportException(
+            'يحتوي جدول $table على عنصر ليس صفًا صالحًا.',
+          );
+        }
+        rows.add(r.map((a, b) => MapEntry('$a', b)));
       }
-      if (rows.isEmpty) return;
       out.putIfAbsent(table, () => []).addAll(rows);
     });
     return out;

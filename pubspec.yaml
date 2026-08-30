@@ -32,6 +32,8 @@ dependencies:
   screenshot: ^3.0.0
   math_expressions: ^2.6.0
   crypto: ^3.0.5
+  google_sign_in: ^6.2.2
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
