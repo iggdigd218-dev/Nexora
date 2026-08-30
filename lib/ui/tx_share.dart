@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../core/accounting.dart';
 import '../core/format.dart';
@@ -114,21 +115,61 @@ class TxShare {
       } else {
         path = await generate(repo: repo, tx: tx, account: acc);
       }
-    } catch (e) {
-      // لا نمنع الإرسال بسبب فشل الصورة — نرسل النص وحده.
-      path = '';
+    } catch (_) {
+      // لا نرسل نصًا مجردًا في عملية البيع؛ فالسند المصوّر جزء من الإشعار.
+      if (context.mounted) {
+        showSnack(context, 'تعذّر تجهيز صورة السند، لم يتم إرسال إشعار نصي فقط.',
+            error: true);
+      }
+      return;
+    }
+
+    if (path.isEmpty || !File(path).existsSync()) {
+      if (context.mounted) {
+        showSnack(context, 'تعذّر العثور على صورة السند، لم يتم إرسال النص وحده.',
+            error: true);
+      }
+      return;
     }
 
     final text = await caption(repo: repo, tx: tx, account: acc);
     final res = await WhatsApp.send(
       phone: phone,
       text: text,
-      imagePath: path.isEmpty ? null : path,
+      imagePath: path,
     );
 
     bump(ref);
-    if (context.mounted && res != WaResult.ok) {
+    if (res == WaResult.imageFailed || res == WaResult.error) {
+      // احتياط: افتح نافذة المشاركة القياسية مع الصورة والنص معًا إذا
+      // رفض إصدار واتساب المثبّت الإرسال المباشر إلى رقم محدد.
+      final shared = await _shareImageWithText(path, text);
+      if (context.mounted) {
+        showSnack(
+          context,
+          shared
+              ? 'تم فتح مشاركة السند بالصورة والنص.'
+              : WhatsApp.messageFor(res),
+          error: !shared,
+        );
+      }
+    } else if (context.mounted && res != WaResult.ok) {
       showSnack(context, WhatsApp.messageFor(res), error: true);
+    }
+  }
+
+  /// مشاركة احتياطية تحفظ الصورة والنص معًا عبر نافذة مشاركة أندرويد.
+  /// تُستخدم فقط إذا رفض إصدار واتساب الإرسال المباشر.
+  static Future<bool> _shareImageWithText(String path, String text) async {
+    try {
+      await Share.shareXFiles(
+        [XFile(path)],
+        text: text,
+        subject: 'سند العملية — إدارة البيانات',
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

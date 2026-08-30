@@ -4,13 +4,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'format.dart';
 
 /// نتيجة محاولة الإرسال.
-enum WaResult { ok, noWhatsApp, badPhone, error }
+enum WaResult { ok, noWhatsApp, badPhone, imageFailed, error }
 
 /// مرسل واتساب — يفتح محادثة الرقم مباشرة بلا نافذة مشاركة.
 ///
-/// الجانب الأصلي (MainActivity.kt) يجرّب سلسلة نوايا: مكوّن ContactPicker
-/// أولًا لأنه يسلّم الصورة والنص إلى المحادثة مباشرة، ثم الحزمة مع jid،
-/// ثم بلا jid، وأخيرًا رابط wa.me نصًا فقط.
+/// الجانب الأصلي (MainActivity.kt) يجرّب سلسلة نوايا للصورة والنص: الحزمة
+/// مع jid، ثم ContactPicker، ثم الحزمة بلا jid، ثم نافذة مشاركة أندرويد.
+/// لا نستخدم رابط wa.me عند وجود صورة لأنه يرسل النص فقط.
 class WhatsApp {
   static const _ch = MethodChannel('nexora/whatsapp');
 
@@ -47,13 +47,18 @@ class WhatsApp {
         'ok' => WaResult.ok,
         'no_whatsapp' => WaResult.noWhatsApp,
         'bad_phone' => WaResult.badPhone,
+        'image_failed' => WaResult.imageFailed,
         _ => WaResult.error,
       };
     } on MissingPluginException {
-      // على غير أندرويد: نكتفي برابط wa.me.
-      return _fallback(digits, text);
+      // لا نستخدم رابط wa.me إذا كانت هناك صورة؛ الرابط لا يستطيع إرفاقها.
+      return imagePath == null
+          ? _fallback(digits, text)
+          : WaResult.imageFailed;
     } on PlatformException {
-      return _fallback(digits, text);
+      return imagePath == null
+          ? _fallback(digits, text)
+          : WaResult.imageFailed;
     }
   }
 
@@ -68,6 +73,7 @@ class WhatsApp {
         WaResult.ok => 'تم فتح واتساب ✅',
         WaResult.noWhatsApp => 'واتساب غير مثبّت على الجهاز',
         WaResult.badPhone => 'رقم الهاتف غير صالح',
+        WaResult.imageFailed => 'تعذّر إرفاق صورة السند في واتساب',
         WaResult.error => 'تعذّر فتح المحادثة',
       };
 }

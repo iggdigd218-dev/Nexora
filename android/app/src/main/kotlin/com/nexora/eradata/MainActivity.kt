@@ -47,9 +47,10 @@ class MainActivity : FlutterFragmentActivity() {
     /**
      * يفتح محادثة الرقم مباشرة داخل واتساب مع الصورة والنص، بلا نافذة مشاركة.
      *
-     * سلسلة المحاولات ضرورية: إضافة jid وحدها تفتح المحادثة لكن نسخًا حديثة
-     * تتجاهل معها المرفق. لذا نبدأ بمكوّن ContactPicker الذي يسلّم الصورة
-     * والنص للمحادثة مباشرة، ثم الحزمة مع jid، ثم بلا jid.
+     * سلسلة المحاولات ضرورية لأن إصدارات واتساب تختلف في دعم jid والمرفقات.
+     * نبدأ بمشاركة الصورة والنص داخل الحزمة مع jid، ثم ContactPicker، ثم بلا jid،
+     * وأخيرًا نافذة مشاركة أندرويد. لا نستخدم رابط wa.me عند وجود صورة لأنه
+     * يرسل النص فقط.
      *
      * ClipData ضرورية: راية منح القراءة لا تسري على EXTRA_STREAM وحدها.
      */
@@ -65,53 +66,59 @@ class MainActivity : FlutterFragmentActivity() {
             ?.takeIf { it.exists() && it.length() > 0L }
             ?.let { src -> copyToShared(src) }
 
-        val jid = "$digits@s.whatsapp.net"
-
+        // عند وجود صورة لا نرجع إلى رابط wa.me النصي؛ الرابط يفقد المرفق.
+        // نجرّب عدة صيغ مشاركة لأن إصدارات واتساب تختلف في دعم jid.
         if (file != null) {
             val uri: Uri = try {
                 FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             } catch (e: Exception) {
-                return sendTextOnly(digits, text, target)
+                return "image_failed"
             }
+            val jid = "$digits@s.whatsapp.net"
             grantUriPermission(target, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            val direct = Intent(Intent.ACTION_SEND).apply {
+            // الصيغة الأولى: واتساب داخل الحزمة مع رقم المحادثة.
+            val withJid = imageIntent(target, uri, text, jid, includeJid = true)
+            if (launch(withJid)) return "ok"
+
+            // بعض إصدارات واتساب تحتاج ContactPicker للوصول المباشر للمحادثة.
+            val direct = imageIntent(target, uri, text, jid, includeJid = true).apply {
                 setClassName(target, "com.whatsapp.ContactPicker")
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, text)
-                putExtra("jid", jid)
-                clipData = ClipData.newUri(contentResolver, "voucher", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             if (launch(direct)) return "ok"
 
-            val withJid = Intent(Intent.ACTION_SEND).apply {
-                setPackage(target)
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, text)
-                putExtra("jid", jid)
-                clipData = ClipData.newUri(contentResolver, "voucher", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            if (launch(withJid)) return "ok"
-
-            val plain = Intent(Intent.ACTION_SEND).apply {
-                setPackage(target)
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, text)
-                clipData = ClipData.newUri(contentResolver, "voucher", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            // مشاركة الصورة والنص داخل واتساب دون jid.
+            val plain = imageIntent(target, uri, text, jid, includeJid = false)
             if (launch(plain)) return "ok"
+
+            // احتياط أخير: نافذة مشاركة أندرويد، مع الحفاظ على الصورة والنص.
+            val chooserSource = imageIntent(null, uri, text, jid, includeJid = false)
+            if (launch(Intent.createChooser(chooserSource, "إرسال سند العملية"))) return "ok"
+
+            // لا نرسل النص وحده؛ على Dart فتح مشاركة بديلة بالصورة والنص.
+            return "image_failed"
         }
 
         return sendTextOnly(digits, text, target)
+    }
+
+    /** يبني Intent صورة مع النص المرافق، مع منح واتساب صلاحية قراءة الملف. */
+    private fun imageIntent(
+        target: String?,
+        uri: Uri,
+        text: String,
+        jid: String,
+        includeJid: Boolean,
+    ): Intent = Intent(Intent.ACTION_SEND).apply {
+        target?.let { setPackage(it) }
+        type = "image/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_TEXT, text)
+        putExtra(Intent.EXTRA_TITLE, "سند العملية")
+        if (includeJid) putExtra("jid", jid)
+        clipData = ClipData.newUri(contentResolver, "voucher", uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     private fun sendTextOnly(digits: String, text: String, target: String): String {

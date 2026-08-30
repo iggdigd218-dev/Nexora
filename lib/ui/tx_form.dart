@@ -213,12 +213,10 @@ class _TxFormState extends ConsumerState<TxForm> {
     final savedId = await repo.saveTx(tx);
     final saved = tx.copyWith(id: savedId);
     if (!mounted) return;
-    bump(ref);
-    Navigator.pop(context, true);
-    showSnack(context,
-        keepId != null ? 'تم تعديل العملية ✅' : 'تمت إضافة العملية وتحديث الرصيد ✅');
 
-    // توليد صورة الإيصال دائمًا، ثم فتح محادثة العميل تلقائيًا إن طُلب ذلك.
+    // نُنشئ صورة الإيصال ونرسلها قبل إغلاق النموذج حتى لا نستخدم
+    // WidgetRef أو BuildContext بعد إزالة نافذة العملية من الشجرة.
+    // هذا مهم خصوصًا للبيع الآجل أو الجزئي الذي يُرسل إشعاره تلقائيًا.
     if (!_isTransfer && _accountId != null) {
       final acc = _account;
       if (_autoSend) {
@@ -229,10 +227,16 @@ class _TxFormState extends ConsumerState<TxForm> {
           await TxShare.generate(repo: repo, tx: saved, account: acc);
           bump(ref);
         } catch (_) {
-          // فشل توليد الصورة لا يبطل العملية المحفوظة
+          // فشل توليد الصورة لا يبطل العملية المحفوظة.
         }
       }
     }
+
+    if (!mounted) return;
+    bump(ref);
+    Navigator.pop(context, true);
+    showSnack(context,
+        keepId != null ? 'تم تعديل العملية ✅' : 'تمت إضافة العملية وتحديث الرصيد ✅');
   }
 
   @override
