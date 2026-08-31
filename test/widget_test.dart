@@ -151,8 +151,8 @@ void main() {
     test('حذف عملية يعيد حساب الرصيد فورًا', () async {
       final id = await repo.saveAccount(_acc());
       final a = (await repo.account(id))!;
-      final txId =
-          await repo.saveTx(_tx(accountId: id, type: OpType.debit, amount: 700));
+      final txId = await repo
+          .saveTx(_tx(accountId: id, type: OpType.debit, amount: 700));
       expect(await repo.balanceOf(a), 700);
 
       await repo.deleteTx(txId);
@@ -204,16 +204,12 @@ void main() {
 
     test('استرجاع عملية محذوفة يعيد معها تفاصيل الأصناف', () async {
       final accountId = await repo.saveAccount(_acc());
-      final itemId = await repo.saveItem(Item(
-          name: 'دفتر', createdAt: _d(1), updatedAt: _d(1)));
+      final itemId = await repo
+          .saveItem(Item(name: 'دفتر', createdAt: _d(1), updatedAt: _d(1)));
       final txId = await repo.saveTx(
         _tx(accountId: accountId, type: OpType.debit, amount: 20),
         items: [
-          InvoiceLine(
-              itemId: itemId,
-              name: 'دفتر',
-              quantity: 2,
-              unitPrice: 10),
+          InvoiceLine(itemId: itemId, name: 'دفتر', quantity: 2, unitPrice: 10),
         ],
       );
       await repo.deleteTx(txId);
@@ -223,8 +219,8 @@ void main() {
     });
 
     test('التحويل ينعكس على طرفيه معًا', () async {
-      final from = await repo.saveAccount(
-          Account(name: 'من', createdAt: _d(1), updatedAt: _d(1)));
+      final from = await repo
+          .saveAccount(Account(name: 'من', createdAt: _d(1), updatedAt: _d(1)));
       final to = await repo.saveAccount(
           Account(name: 'إلى', createdAt: _d(1), updatedAt: _d(1)));
 
@@ -237,8 +233,11 @@ void main() {
 
     test('الأرصدة الجماعية تطابق الحساب الفردي', () async {
       final a1 = await repo.saveAccount(_acc(opening: 100));
-      final a2 = await repo.saveAccount(
-          Account(name: 'ثانٍ', openingBalance: -50, createdAt: _d(1), updatedAt: _d(1)));
+      final a2 = await repo.saveAccount(Account(
+          name: 'ثانٍ',
+          openingBalance: -50,
+          createdAt: _d(1),
+          updatedAt: _d(1)));
       await repo.saveTx(_tx(accountId: a1, type: OpType.debit, amount: 25));
 
       final all = await repo.accounts();
@@ -326,10 +325,10 @@ void main() {
 
     test('التصفية بالحساب تشمل طرفي التحويل', () async {
       final a = await repo.saveAccount(_acc());
-      final b = await repo.saveAccount(
-          Account(name: 'ب', createdAt: _d(1), updatedAt: _d(1)));
-      await repo.saveTx(
-          _tx(type: OpType.transfer, amount: 50, fromId: a, toId: b));
+      final b = await repo
+          .saveAccount(Account(name: 'ب', createdAt: _d(1), updatedAt: _d(1)));
+      await repo
+          .saveTx(_tx(type: OpType.transfer, amount: 50, fromId: a, toId: b));
 
       expect((await repo.transactions(accountId: a)).length, 1);
       expect((await repo.transactions(accountId: b)).length, 1);
@@ -533,8 +532,8 @@ void main() {
       final dump = await repo.exportAll();
 
       // نغيّر الحالة ثم نستعيد
-      await repo.saveAccount(Account(
-          name: 'دخيل', createdAt: _d(2), updatedAt: _d(2)));
+      await repo.saveAccount(
+          Account(name: 'دخيل', createdAt: _d(2), updatedAt: _d(2)));
       expect((await repo.accounts()).length, 2);
 
       await repo.importAll(dump);
@@ -545,8 +544,8 @@ void main() {
 
     test('النسخة الاحتياطية تحفظ سطور الفاتورة وتعيدها', () async {
       final accountId = await repo.saveAccount(_acc());
-      final itemId = await repo.saveItem(Item(
-          name: 'قلم', createdAt: _d(1), updatedAt: _d(1)));
+      final itemId = await repo
+          .saveItem(Item(name: 'قلم', createdAt: _d(1), updatedAt: _d(1)));
       final txId = await repo.saveTx(
         _tx(accountId: accountId, type: OpType.debit, amount: 12),
         items: [
@@ -692,6 +691,62 @@ void main() {
       await repo.restoreFromTrash(t.first['id'] as int);
       expect((await repo.items()).length, 1);
     });
+
+    test('الفئات غير محدودة وتربط الأصناف بها', () async {
+      final now = _d(1);
+      final foodId = await repo.saveItemCategory(ItemCategory(
+        name: 'مواد غذائية',
+        createdAt: now,
+        updatedAt: now,
+      ));
+      final toolsId = await repo.saveItemCategory(ItemCategory(
+        name: 'أدوات',
+        createdAt: now,
+        updatedAt: now,
+      ));
+      expect((await repo.itemCategories()).length, 2);
+
+      final itemId = await repo.saveItem(Item(
+        name: 'أرز',
+        categoryId: foodId,
+        category: 'مواد غذائية',
+        createdAt: now,
+        updatedAt: now,
+      ));
+      expect((await repo.item(itemId))!.categoryId, foodId);
+
+      await repo.saveItemCategory((await repo.itemCategories())
+          .firstWhere((c) => c.id == foodId)
+          .copyWith(name: 'غذائيات'));
+      final renamed = (await repo.item(itemId))!;
+      expect(renamed.categoryId, foodId);
+      expect(renamed.category, 'غذائيات');
+
+      await repo.deleteItemCategory(toolsId);
+      expect((await repo.itemCategories()).length, 1);
+      expect((await repo.item(itemId))!.categoryId, foodId);
+
+      await repo.deleteItemCategory(foodId);
+      final unlinked = (await repo.item(itemId))!;
+      expect(unlinked.categoryId, isNull);
+      expect(unlinked.category, isEmpty);
+    });
+
+    test('النسخة الاحتياطية تشمل فئات الأصناف', () async {
+      final now = _d(1);
+      await repo.saveItemCategory(ItemCategory(
+        name: 'إلكترونيات',
+        createdAt: now,
+        updatedAt: now,
+      ));
+      final dump = await repo.exportAll(withImages: false);
+      final data = dump['data'] as Map<String, Object?>;
+      expect(data.containsKey('item_categories'), isTrue);
+      expect((data['item_categories'] as List).length, 1);
+
+      await repo.importAll(dump);
+      expect((await repo.itemCategories()).single.name, 'إلكترونيات');
+    });
   });
 
   // ==================== كلمات المرور والنسخ المتسامحة ====================
@@ -760,11 +815,18 @@ void main() {
 
     test('التصدير يشمل الأصناف والحركات', () async {
       final id = await repo.saveItem(Item(
-          name: 'زيت', buyPrice: 10, sellPrice: 15,
-          createdAt: _d(1), updatedAt: _d(1)));
+          name: 'زيت',
+          buyPrice: 10,
+          sellPrice: 15,
+          createdAt: _d(1),
+          updatedAt: _d(1)));
       await repo.addStockMove(StockMove(
-          itemId: id, kind: StockKind.purchase, quantity: 3,
-          unitPrice: 10, date: _d(1), createdAt: _d(1)));
+          itemId: id,
+          kind: StockKind.purchase,
+          quantity: 3,
+          unitPrice: 10,
+          date: _d(1),
+          createdAt: _d(1)));
       final dump = await repo.exportAll(withImages: false);
       final data = dump['data'] as Map<String, Object?>;
       expect((data['items'] as List).length, 1);

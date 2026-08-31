@@ -23,8 +23,7 @@ import 'vouchers_screen.dart';
 enum AppScreen {
   dashboard('لوحة التحكم', Icons.dashboard_outlined, Icons.dashboard),
   accounts('الحسابات', Icons.people_alt_outlined, Icons.people_alt),
-  transactions(
-      'العمليات', Icons.receipt_long_outlined, Icons.receipt_long),
+  transactions('العمليات', Icons.receipt_long_outlined, Icons.receipt_long),
   vouchers('السندات', Icons.receipt_outlined, Icons.receipt),
   reports('التقارير', Icons.bar_chart_outlined, Icons.bar_chart),
   inventory('المخزون والأصناف', Icons.inventory_2_outlined, Icons.inventory_2),
@@ -102,9 +101,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             label: const Text('سند جديد'),
           ),
         AppScreen.inventory => FloatingActionButton.extended(
-            onPressed: () => openItemForm(context, ref),
-            icon: const Icon(Icons.add),
-            label: const Text('صنف جديد'),
+            onPressed: () => openItemCategoryForm(context, ref),
+            icon: const Icon(Icons.create_new_folder_outlined),
+            label: const Text('فئة جديدة'),
           ),
         AppScreen.users => FloatingActionButton.extended(
             onPressed: () => openUserForm(context, ref),
@@ -241,8 +240,7 @@ class _Drawer extends ConsumerWidget {
                     title: Text(
                       s.title,
                       style: TextStyle(
-                        fontWeight:
-                            active ? FontWeight.w800 : FontWeight.w600,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                         fontSize: 14,
                         color: active
                             ? AppColors.primaryOf(context)
@@ -264,9 +262,9 @@ class _Drawer extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
-                'الإصدار 3.1.0',
-                style: TextStyle(
-                    fontSize: 11, color: AppColors.text3Of(context)),
+                'الإصدار 3.4.0',
+                style:
+                    TextStyle(fontSize: 11, color: AppColors.text3Of(context)),
               ),
             ),
           ],

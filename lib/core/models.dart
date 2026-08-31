@@ -115,7 +115,11 @@ class Account {
       creditLimit: (m['credit_limit'] as num?)?.toDouble(),
       tags: raw.isEmpty
           ? const []
-          : raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+          : raw
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(),
       archived: ((m['archived'] ?? 0) as int) == 1,
       image: (m['image'] ?? '') as String,
       createdAt: DateTime.parse(m['created_at'] as String),
@@ -709,9 +713,8 @@ enum StockKind {
   final String label;
   const StockKind(this.code, this.label);
 
-  static StockKind fromCode(String c) =>
-      StockKind.values.firstWhere((e) => e.code == c,
-          orElse: () => StockKind.purchase);
+  static StockKind fromCode(String c) => StockKind.values
+      .firstWhere((e) => e.code == c, orElse: () => StockKind.purchase);
 
   /// إشارة تأثير الحركة على الكمية المتبقية.
   int get qtySign => switch (this) {
@@ -722,10 +725,55 @@ enum StockKind {
       };
 }
 
+/// فئة/قسم أصناف داخل المخزون.
+///
+/// الفئات مستقلة عن تصنيفات الحسابات، ويمكن إنشاء عدد غير محدود منها.
+class ItemCategory {
+  final int? id;
+  final String name;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const ItemCategory({
+    this.id,
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  ItemCategory copyWith({
+    int? id,
+    String? name,
+    DateTime? updatedAt,
+  }) =>
+      ItemCategory(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        createdAt: createdAt,
+        updatedAt: updatedAt ?? DateTime.now(),
+      );
+
+  Map<String, Object?> toMap() => {
+        if (id != null) 'id': id,
+        'name': name,
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+      };
+
+  factory ItemCategory.fromMap(Map<String, Object?> m) => ItemCategory(
+        id: m['id'] as int?,
+        name: (m['name'] ?? '') as String,
+        createdAt: DateTime.parse(m['created_at'] as String),
+        updatedAt:
+            DateTime.parse((m['updated_at'] ?? m['created_at']) as String),
+      );
+}
+
 /// صنف في المخزون.
 class Item {
   final int? id;
   final String name;
+  final int? categoryId;
   final String sku;
   final String unit;
   final double buyPrice;
@@ -743,6 +791,7 @@ class Item {
   const Item({
     this.id,
     required this.name,
+    this.categoryId,
     this.sku = '',
     this.unit = 'حبة',
     this.buyPrice = 0,
@@ -762,8 +811,7 @@ class Item {
   double get unitProfit => sellPrice - buyPrice;
 
   /// نسبة الربح إلى سعر الشراء (٪).
-  double get marginPercent =>
-      buyPrice <= 0 ? 0 : (unitProfit / buyPrice) * 100;
+  double get marginPercent => buyPrice <= 0 ? 0 : (unitProfit / buyPrice) * 100;
 
   /// قيمة المخزون بسعر الشراء.
   double get stockCost => buyPrice * quantity;
@@ -780,6 +828,8 @@ class Item {
   Item copyWith({
     int? id,
     String? name,
+    int? categoryId,
+    bool clearCategoryId = false,
     String? sku,
     String? unit,
     double? buyPrice,
@@ -795,6 +845,7 @@ class Item {
       Item(
         id: id ?? this.id,
         name: name ?? this.name,
+        categoryId: clearCategoryId ? null : (categoryId ?? this.categoryId),
         sku: sku ?? this.sku,
         unit: unit ?? this.unit,
         buyPrice: buyPrice ?? this.buyPrice,
@@ -813,6 +864,7 @@ class Item {
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
         'name': name,
+        'category_id': categoryId,
         'sku': sku,
         'unit': unit,
         'buy_price': buyPrice,
@@ -831,6 +883,7 @@ class Item {
   factory Item.fromMap(Map<String, Object?> m) => Item(
         id: m['id'] as int?,
         name: (m['name'] ?? '') as String,
+        categoryId: m['category_id'] as int?,
         sku: (m['sku'] ?? '') as String,
         unit: (m['unit'] ?? 'حبة') as String,
         buyPrice: ((m['buy_price'] ?? 0) as num).toDouble(),
@@ -898,7 +951,6 @@ class StockMove {
         accountId: m['account_id'] as int?,
         notes: (m['notes'] ?? '') as String,
         date: DateTime.parse(m['date'] as String),
-        createdAt: DateTime.parse(
-            (m['created_at'] ?? m['date']) as String),
+        createdAt: DateTime.parse((m['created_at'] ?? m['date']) as String),
       );
 }

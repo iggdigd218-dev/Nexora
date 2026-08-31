@@ -10,7 +10,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static Database? _db;
-  static const int _version = 3;
+  static const int _version = 4;
 
   static int get schemaVersion => _version;
 
@@ -133,6 +133,12 @@ class AppDatabase {
         created_at TEXT NOT NULL
       )''');
 
+    // ---------- فئات المخزون والأصناف ----------
+    // مستقلة عن تصنيفات الحسابات، وتقبل عددًا غير محدود من الفئات.
+    await db.execute(createItemCategoriesSql);
+    await db.execute(
+        'CREATE UNIQUE INDEX idx_item_categories_name ON item_categories(name COLLATE NOCASE)');
+
     // ---------- المستخدمون والصلاحيات ----------
     await db.execute('''
       CREATE TABLE users (
@@ -216,8 +222,8 @@ class AppDatabase {
     await db.execute(createStockSql);
     await db.execute('CREATE INDEX idx_stock_item ON stock_moves(item_id)');
     await db.execute(createTransactionItemsSql);
-    await db.execute(
-        'CREATE INDEX idx_tx_items_tx ON transaction_items(tx_id)');
+    await db
+        .execute('CREATE INDEX idx_tx_items_tx ON transaction_items(tx_id)');
 
     // ---------- الإعدادات: مفتاح/قيمة كما في نسخة الويب ----------
     await db.execute('''
@@ -229,11 +235,21 @@ class AppDatabase {
     await _seed(db);
   }
 
+  /// جدول فئات المخزون/الأصناف.
+  static const createItemCategoriesSql = '''
+      CREATE TABLE item_categories (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )''';
+
   /// جدول الأصناف: سعر الشراء والبيع والكمية الحالية.
   static const createItemsSql = '''
       CREATE TABLE items (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         name          TEXT NOT NULL,
+        category_id   INTEGER,
         sku           TEXT DEFAULT '',
         unit          TEXT DEFAULT 'حبة',
         buy_price     REAL NOT NULL DEFAULT 0,
@@ -246,7 +262,8 @@ class AppDatabase {
         image         TEXT DEFAULT '',
         archived      INTEGER NOT NULL DEFAULT 0,
         created_at    TEXT NOT NULL,
-        updated_at    TEXT NOT NULL
+        updated_at    TEXT NOT NULL,
+        FOREIGN KEY (category_id) REFERENCES item_categories (id) ON DELETE SET NULL
       )''';
 
   /// حركات المخزون: شراء يزيد الكمية، بيع ينقصها ويحقّق ربحًا.
@@ -292,8 +309,31 @@ class AppDatabase {
     }
     if (from < 3) {
       await db.execute(createTransactionItemsSql);
+      await db
+          .execute('CREATE INDEX idx_tx_items_tx ON transaction_items(tx_id)');
+    }
+    if (from < 4) {
+      // تحويل التصنيف النصي القديم إلى فئات حقيقية دون فقد أي صنف.
+      await db.execute(createItemCategoriesSql);
       await db.execute(
-          'CREATE INDEX idx_tx_items_tx ON transaction_items(tx_id)');
+          'CREATE UNIQUE INDEX idx_item_categories_name ON item_categories(name COLLATE NOCASE)');
+      await _addColumn(db, 'items', 'category_id', 'INTEGER');
+      final now = DateTime.now().toIso8601String();
+      await db.execute('''
+        INSERT OR IGNORE INTO item_categories (name, created_at, updated_at)
+        SELECT DISTINCT TRIM(category), '$now', '$now'
+        FROM items
+        WHERE TRIM(COALESCE(category, '')) <> ''
+      ''');
+      await db.execute('''
+        UPDATE items
+        SET category_id = (
+          SELECT c.id
+          FROM item_categories c
+          WHERE c.name = TRIM(items.category) COLLATE NOCASE
+        )
+        WHERE TRIM(COALESCE(category, '')) <> ''
+      ''');
     }
   }
 

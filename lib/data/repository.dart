@@ -130,8 +130,8 @@ class Repo {
       }
 
       if (items != null) {
-        await txn.delete('transaction_items',
-            where: 'tx_id = ?', whereArgs: [id]);
+        await txn
+            .delete('transaction_items', where: 'tx_id = ?', whereArgs: [id]);
         for (final line in items) {
           await txn.insert('transaction_items', line.toMap(transactionId: id));
         }
@@ -183,7 +183,8 @@ class Repo {
       }
       // الحذف الصريح يحافظ على السلوك نفسه حتى في قواعد الاختبار أو
       // القواعد القديمة التي لم تُفعّل مفاتيح SQLite الأجنبية.
-      await txn.delete('transaction_items', where: 'tx_id = ?', whereArgs: [id]);
+      await txn
+          .delete('transaction_items', where: 'tx_id = ?', whereArgs: [id]);
       await txn.delete('transactions', where: 'id = ?', whereArgs: [id]);
     });
     await logActivity('حذف عملية', 'tx', '$id');
@@ -197,11 +198,7 @@ class Repo {
       if (x.type != t.type || x.amount != t.amount) return false;
       if (x.currency != t.currency) return false;
       if (x.date.difference(t.date).inDays.abs() > 0) return false;
-      return x.createdAt
-              .difference(t.createdAt)
-              .inMilliseconds
-              .abs() <
-          120000;
+      return x.createdAt.difference(t.createdAt).inMilliseconds.abs() < 120000;
     }).toList();
   }
 
@@ -296,7 +293,6 @@ class Repo {
     return db.query('activity', orderBy: 'id DESC', limit: limit);
   }
 
-
   // ==================== السندات ====================
 
   Future<List<Voucher>> vouchers({
@@ -349,7 +345,8 @@ class Repo {
       return id;
     }
     await db.update('vouchers', v.toMap(), where: 'id = ?', whereArgs: [v.id]);
-    await logActivity('تعديل ${v.kind.label} ${v.number}', 'voucher', '${v.id}');
+    await logActivity(
+        'تعديل ${v.kind.label} ${v.number}', 'voucher', '${v.id}');
     return v.id!;
   }
 
@@ -552,6 +549,7 @@ class Repo {
     'vouchers',
     'currencies',
     'categories',
+    'item_categories',
     'users',
     'conversations',
     'messages',
@@ -569,6 +567,7 @@ class Repo {
     'users',
     'accounts',
     'transactions',
+    'item_categories',
     'items',
     'transaction_items',
     'vouchers',
@@ -587,6 +586,7 @@ class Repo {
     'transaction_items',
     'vouchers',
     'categories',
+    'item_categories',
     'users',
     'conversations',
     'messages',
@@ -608,6 +608,7 @@ class Repo {
     'buyPrice': 'buy_price',
     'sellPrice': 'sell_price',
     'minQuantity': 'min_quantity',
+    'categoryId': 'category_id',
     'conversationId': 'conversation_id',
     'createdAt': 'created_at',
     'updatedAt': 'updated_at',
@@ -736,6 +737,7 @@ class Repo {
           'transactions',
           'accounts',
           'categories',
+          'item_categories',
           'users',
           'currencies',
           'settings',
@@ -865,6 +867,7 @@ class Repo {
     final checks = <({String table, String column, String parent})>[
       (table: 'stock_moves', column: 'account_id', parent: 'accounts'),
       (table: 'vouchers', column: 'tx_id', parent: 'transactions'),
+      (table: 'items', column: 'category_id', parent: 'item_categories'),
       (table: 'transaction_items', column: 'item_id', parent: 'items'),
     ];
     for (final check in checks) {
@@ -949,20 +952,20 @@ class Repo {
   String _imageExtension(String path) {
     final extension = p.extension(path).toLowerCase();
     return const {
-          '.png',
-          '.jpg',
-          '.jpeg',
-          '.webp',
-          '.gif',
-          '.heic',
-          '.pdf',
-          '.mp4',
-          '.mov',
-          '.doc',
-          '.docx',
-          '.xls',
-          '.xlsx',
-        }.contains(extension)
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.webp',
+      '.gif',
+      '.heic',
+      '.pdf',
+      '.mp4',
+      '.mov',
+      '.doc',
+      '.docx',
+      '.xls',
+      '.xlsx',
+    }.contains(extension)
         ? extension
         : '.png';
   }
@@ -1011,6 +1014,10 @@ class Repo {
       'receipts': 'vouchers',
       'currencies': 'currencies',
       'categories': 'categories',
+      'item_categories': 'item_categories',
+      'itemcategories': 'item_categories',
+      'inventory_categories': 'item_categories',
+      'product_categories': 'item_categories',
       'users': 'users',
       'conversations': 'conversations',
       'messages': 'messages',
@@ -1045,9 +1052,93 @@ class Repo {
     return out;
   }
 
+  // ==================== فئات الأصناف ====================
+
+  /// فئات المخزون فقط؛ لا تختلط بتصنيفات الحسابات.
+  Future<List<ItemCategory>> itemCategories() async {
+    final db = await _db;
+    final rows = await db.query(
+      'item_categories',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    return rows.map(ItemCategory.fromMap).toList();
+  }
+
+  /// إضافة فئة أو تعديل اسمها مع تحديث اسم الفئة في الأصناف التابعة لها.
+  Future<int> saveItemCategory(ItemCategory category) async {
+    final name = category.name.trim();
+    if (name.isEmpty) throw ArgumentError('اسم الفئة مطلوب');
+
+    final db = await _db;
+    final duplicate = await db.query(
+      'item_categories',
+      columns: ['id'],
+      where: 'name = ? COLLATE NOCASE AND id != ?',
+      whereArgs: [name, category.id ?? -1],
+      limit: 1,
+    );
+    if (duplicate.isNotEmpty) {
+      throw StateError('توجد فئة بهذا الاسم مسبقًا');
+    }
+
+    late final int id;
+    if (category.id == null) {
+      id = await db.insert('item_categories', {
+        'name': name,
+        'created_at': category.createdAt.toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      await logActivity('إضافة فئة أصناف: $name', 'item_category', '$id');
+      return id;
+    }
+
+    id = category.id!;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.update(
+        'item_categories',
+        {'name': name, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await txn.update(
+        'items',
+        {'category': name, 'updated_at': now},
+        where: 'category_id = ?',
+        whereArgs: [id],
+      );
+    });
+    await logActivity('تعديل فئة أصناف: $name', 'item_category', '$id');
+    return id;
+  }
+
+  /// يحذف الفئة فقط، ويفك ربط أصنافها لتبقى بيانات الأصناف محفوظة.
+  Future<void> deleteItemCategory(int id) async {
+    final db = await _db;
+    final rows = await db.query(
+      'item_categories',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (rows.isEmpty) return;
+    final name = rows.first['name'] as String;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.update(
+        'items',
+        {'category_id': null, 'category': '', 'updated_at': now},
+        where: 'category_id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete('item_categories', where: 'id = ?', whereArgs: [id]);
+    });
+    await logActivity('حذف فئة أصناف: $name', 'item_category', '$id');
+  }
+
   // ==================== الأصناف والمخزون ====================
 
-  Future<List<Item>> items({bool includeArchived = false, String q = ''}) async {
+  Future<List<Item>> items(
+      {bool includeArchived = false, String q = ''}) async {
     final db = await _db;
     final where = <String>[];
     final args = <Object?>[];
@@ -1194,8 +1285,8 @@ class Repo {
   Future<Map<String, int>> counts() async {
     final db = await _db;
     Future<int> c(String t, [String? where]) async =>
-        Sqflite.firstIntValue(await db
-            .rawQuery('SELECT COUNT(*) FROM $t${where == null ? '' : ' WHERE $where'}')) ??
+        Sqflite.firstIntValue(await db.rawQuery(
+            'SELECT COUNT(*) FROM $t${where == null ? '' : ' WHERE $where'}')) ??
         0;
     return {
       'accounts': await c('accounts', 'archived = 0'),

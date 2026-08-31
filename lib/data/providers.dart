@@ -10,12 +10,10 @@ final repoProvider = Provider<Repo>((ref) => Repo());
 /// عدّاد يُزاد بعد كل تعديل ليُعيد بناء كل ما يعتمد على البيانات.
 final refreshProvider = StateProvider<int>((ref) => 0);
 
-void bump(WidgetRef ref) =>
-    ref.read(refreshProvider.notifier).state++;
+void bump(WidgetRef ref) => ref.read(refreshProvider.notifier).state++;
 
 /// الإعدادات كخريطة مفتاح/قيمة — تقابل settings() في نسخة الويب.
-final settingsProvider =
-    FutureProvider<Map<String, String>>((ref) async {
+final settingsProvider = FutureProvider<Map<String, String>>((ref) async {
   ref.watch(refreshProvider);
   return ref.read(repoProvider).settings();
 });
@@ -65,8 +63,7 @@ final accountFilterProvider =
     StateProvider<AccountFilter>((ref) => const AccountFilter());
 
 /// الحسابات مع أرصدتها، مطبَّقًا عليها الفلتر.
-final accountsProvider =
-    FutureProvider<List<AccountWithBalance>>((ref) async {
+final accountsProvider = FutureProvider<List<AccountWithBalance>>((ref) async {
   ref.watch(refreshProvider);
   final f = ref.watch(accountFilterProvider);
   final repo = ref.read(repoProvider);
@@ -170,15 +167,13 @@ final recentTxProvider = FutureProvider<List<Tx>>((ref) async {
 });
 
 /// عمليات حساب بعينه.
-final accountTxProvider =
-    FutureProvider.family<List<Tx>, int>((ref, id) async {
+final accountTxProvider = FutureProvider.family<List<Tx>, int>((ref, id) async {
   ref.watch(refreshProvider);
   return ref.read(repoProvider).transactions(accountId: id);
 });
 
 /// تنبيهات: تجاوز الحد الائتماني.
-final alertsProvider =
-    FutureProvider<List<AccountWithBalance>>((ref) async {
+final alertsProvider = FutureProvider<List<AccountWithBalance>>((ref) async {
   ref.watch(refreshProvider);
   final repo = ref.read(repoProvider);
   final accounts = await repo.accounts();
@@ -296,9 +291,8 @@ final txPageProvider = FutureProvider<TxPage>((ref) async {
   var list = all.where((t) {
     if (f.currency != null && t.currency != f.currency) return false;
     if (q.isEmpty) return true;
-    final accName = t.type == OpType.transfer
-        ? 'تحويل'
-        : (byId[t.accountId]?.name ?? '');
+    final accName =
+        t.type == OpType.transfer ? 'تحويل' : (byId[t.accountId]?.name ?? '');
     final hay =
         '${t.description} ${t.reference} $accName ${t.notes}'.toLowerCase();
     return hay.contains(q);
@@ -489,8 +483,7 @@ final categoriesProvider = FutureProvider<List<String>>((ref) async {
   return ref.watch(repoProvider).categories();
 });
 
-final trashProvider =
-    FutureProvider<List<Map<String, Object?>>>((ref) async {
+final trashProvider = FutureProvider<List<Map<String, Object?>>>((ref) async {
   ref.watch(refreshProvider);
   return ref.watch(repoProvider).trash();
 });
@@ -515,6 +508,12 @@ final messagesProvider =
 });
 
 // ==================== الأصناف والمخزون ====================
+
+/// فئات الأصناف التي تظهر أولًا في شاشة المخزون.
+final itemCategoriesProvider = FutureProvider<List<ItemCategory>>((ref) async {
+  ref.watch(refreshProvider);
+  return ref.read(repoProvider).itemCategories();
+});
 
 /// نص البحث في شاشة المخزون.
 final itemQueryProvider = StateProvider<String>((ref) => '');
