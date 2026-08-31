@@ -12,7 +12,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.nexora.eradata"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -47,8 +47,10 @@ android {
     buildTypes {
         release {
             signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
-            minifyEnabled = true
-            shrinkResources = true
+            // Keep the release build reliable on low-memory devices and preserve all
+            // Flutter reflection/serialization entry points used by the app.
+            minifyEnabled = false
+            shrinkResources = false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                           'proguard-rules.pro'
         }
