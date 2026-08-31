@@ -47,9 +47,12 @@ android {
     buildTypes {
         release {
             signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
-            // لا نستخدم R8 هنا؛ المشروع يحتاج ذاكرة محدودة أثناء إصدار APK.
+            // Keep the release build reliable on low-memory devices and preserve all
+            // Flutter reflection/serialization entry points used by the app.
             minifyEnabled = false
             shrinkResources = false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                          'proguard-rules.pro'
         }
     }
 }
