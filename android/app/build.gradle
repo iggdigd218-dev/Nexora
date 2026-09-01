@@ -1,18 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.nexora.eradata"
-    compileSdk = rootProject.ext.compileSdkVersion
-    signingConfigs {
-        release {
-            if (System.getenv("RELEASE_STORE_FILE")) {
-                storeFile file(System.getenv("RELEASE_STORE_FILE"))
-                storePassword System.getenv("RELEASE_STORE_PASSWORD")
-                keyAlias System.getenv("RELEASE_KEY_ALIAS")
-                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
-            }
-        }
-    }
+    namespace "com.nexora.eradata"
+    compileSdkVersion rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.nexora.eradata"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -21,10 +11,12 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
     buildTypes {
         release {

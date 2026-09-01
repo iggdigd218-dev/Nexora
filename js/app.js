@@ -247,9 +247,8 @@ function setupGlobalHandlers() {
       }
     });
   }
-  // زر نظام المبيعات العائم في أسفل يسار الشاشة
-  const posFab = $('#btn-pos-fab');
-  if (posFab) posFab.onclick = () => go('pos');
+  const posBtn = $('#btn-pos-topbar');
+  if (posBtn) posBtn.onclick = () => go('pos');
 
   // FAB
   $('#fab-add').onclick = () => $('#fab-menu').classList.toggle('hidden');

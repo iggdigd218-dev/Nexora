@@ -138,10 +138,10 @@ export function render(container, params, state) {
       <div class="card">
         <div class="section-title">اختصارات سريعة</div>
         <div class="grid grid-2" style="gap:10px">
+          <button class="btn ghost" data-nav="pos">🛒 المبيعات ونقاط البيع</button>
           <button class="btn ghost" data-quick="tx">💸 عملية جديدة</button>
           <button class="btn ghost" data-quick="account">👤 حساب جديد</button>
           <button class="btn ghost" data-quick="voucher">🧾 سند جديد</button>
-          <button class="btn ghost" data-nav="reports">📈 تقرير</button>
         </div>
         <div class="divider"></div>
         <div class="section-title">التنبيهات</div>
