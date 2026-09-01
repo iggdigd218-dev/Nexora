@@ -177,14 +177,75 @@ export function beep() {
   } catch (e) {}
 }
 
-export function openWhatsApp(phone, text) {
+export function cleanPhoneNumber(phone, defaultCountry = '967') {
   let p = String(phone || '').replace(/\D/g, '');
   if (p.startsWith('00')) p = p.slice(2);
-  if (!p.startsWith('+') && p.length > 0 && !p.startsWith('966') && !p.startsWith('967') && !p.startsWith('971')) {
-    // اتركه كما هو مع رمز الدولة إن وُجد في البيانات
+  if (p.startsWith('+')) p = p.slice(1);
+  if (p.startsWith('0') && p.length === 10) p = p.slice(1); // إزالة الصفر الأول إذا كان محلياً
+  if (p.length === 9 && (p.startsWith('7') || p.startsWith('1'))) {
+    p = (defaultCountry || '967') + p;
+  } else if (p.length === 9 && p.startsWith('5')) {
+    p = '966' + p;
   }
-  const url = 'https://wa.me/' + p.replace(/^\+/, '') + '?text=' + encodeURIComponent(text || '');
-  window.open(url, '_blank');
+  return p;
+}
+
+export function openWhatsApp(phone, text, appType = 'regular') {
+  const p = cleanPhoneNumber(phone);
+  const encoded = encodeURIComponent(text || '');
+  if (appType === 'business') {
+    // محاولة فتح واتساب للأعمال مباشرة
+    const bUrl = `whatsapp://send?phone=${p}&text=${encoded}`;
+    try {
+      window.location.href = bUrl;
+      setTimeout(() => {
+        try {
+          const a = document.createElement('a');
+          a.href = `https://wa.me/${p}?text=${encoded}`;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => a.remove(), 400);
+        } catch (_) {
+          window.open(`https://wa.me/${p}?text=${encoded}`, '_blank');
+        }
+      }, 700);
+      return;
+    } catch (_) {}
+  }
+  
+  if (appType === 'intent') {
+    window.location.href = `whatsapp://send?phone=${p}&text=${encoded}`;
+    return;
+  }
+  
+  const url = `https://wa.me/${p}?text=${encoded}`;
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 400);
+  } catch (_) {
+    window.open(url, '_blank');
+  }
+}
+
+export function openSMS(phone, text) {
+  let rawPhone = String(phone || '').trim();
+  // إزالة الأحرف غير الرقمية ما عدا +
+  let p = rawPhone.replace(/[^\d+]/g, '');
+  const encoded = encodeURIComponent(text || '');
+  // رابط SMS متوافق مع Android و iOS
+  const url = `sms:${p}?&body=${encoded}`;
+  try {
+    window.location.href = url;
+  } catch (_) {
+    window.open(url, '_self');
+  }
 }
 
 export function copyText(text) {

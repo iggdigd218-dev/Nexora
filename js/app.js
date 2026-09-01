@@ -4,11 +4,12 @@ import { store } from './store.js';
 import { toast, toastErr, openModal, confirmDialog, readForm, handleAttachment } from './components.js';
 import { ACCOUNT_KINDS } from './accounting.js';
 import * as views from './views/index.js';
+import { initNotificationEngine, notifyDataChangeForBackup } from './notifications.js';
 
 const state = {
   route: 'dashboard',
   params: {},
-  sidebarOpen: window.innerWidth >= 1000,
+  sidebarOpen: false,
   hideBalance: false,
   locked: false,
   currentUser: null,
@@ -187,6 +188,7 @@ function finishStart() {
     setupPin();
   }
   applyTheme(st.theme || 'light');
+  document.documentElement.dataset.sidebar = state.sidebarOpen ? 'open' : 'closed';
   setupGlobalHandlers();
   render();
   refreshTopbar();
@@ -194,10 +196,28 @@ function finishStart() {
 
 function setupGlobalHandlers() {
   const sidebar = $('#sidebar');
-  $('#toggle-sidebar').onclick = () => {
+  const closeSidebar = () => {
+    state.sidebarOpen = false;
+    document.documentElement.dataset.sidebar = 'closed';
+  };
+  const openSidebar = () => {
+    state.sidebarOpen = true;
+    document.documentElement.dataset.sidebar = 'open';
+  };
+  const toggleSidebar = () => {
     state.sidebarOpen = !state.sidebarOpen;
     document.documentElement.dataset.sidebar = state.sidebarOpen ? 'open' : 'closed';
   };
+
+  const toggleBtn = $('#toggle-sidebar');
+  if (toggleBtn) toggleBtn.onclick = toggleSidebar;
+
+  const closeBtn = $('#btn-close-sidebar');
+  if (closeBtn) closeBtn.onclick = closeSidebar;
+
+  const backdrop = $('#sidebar-backdrop');
+  if (backdrop) backdrop.onclick = closeSidebar;
+
   $('#btn-theme').onclick = () => {
     const cur = document.documentElement.dataset.theme;
     const next = cur === 'dark' ? 'light' : 'dark';
@@ -218,20 +238,27 @@ function setupGlobalHandlers() {
     window.open('https://wa.me/967774190040?text=' + encodeURIComponent('مرحباً، أحتاج مساعدة من خدمة العملاء'), '_blank');
   };
   $('#btn-search').onclick = () => openGlobalSearch();
-  // إغلاق القائمة عند اختيار عنصر على الجوال
-  $('#sidebar').addEventListener('click', (e) => {
-    if (e.target.closest('.nav-item') && window.innerWidth < 1000) {
-      state.sidebarOpen = false;
-      document.documentElement.dataset.sidebar = 'closed';
-    }
-  });
+
+  // إغلاق القائمة تلقائياً عند اختيار أي قسم
+  if (sidebar) {
+    sidebar.addEventListener('click', (e) => {
+      if (e.target.closest('.nav-item') || e.target.closest('.btn.support')) {
+        closeSidebar();
+      }
+    });
+  }
+  // زر نظام المبيعات العائم في أسفل يسار الشاشة
+  const posFab = $('#btn-pos-fab');
+  if (posFab) posFab.onclick = () => go('pos');
+
   // FAB
   $('#fab-add').onclick = () => $('#fab-menu').classList.toggle('hidden');
   $('#fab-menu').addEventListener('click', (e) => {
     const act = e.target.closest('[data-act]');
     if (!act) return;
     $('#fab-menu').classList.add('hidden');
-    if (act.dataset.act === 'account') go('accounts', { new: 1 });
+    if (act.dataset.act === 'pos') go('pos');
+    else if (act.dataset.act === 'account') go('accounts', { new: 1 });
     else if (act.dataset.act === 'transaction') go('transactions', { new: 1 });
     else if (act.dataset.act === 'voucher') go('vouchers', { new: 1 });
   });
@@ -307,7 +334,10 @@ export function openQuickTransaction() {
 // ---- إعادة العرض عند تغيير البيانات ----
 store.onChange((payload) => {
   if (state.locked) return;
-  if (location.hash && ['accounts','inventory','transactions','dashboard','vouchers','currencies','reports','chat'].includes(state.route)) {
+  if (payload && ['transactions', 'transactionItems', 'vouchers', 'accounts', 'items'].includes(payload.store)) {
+    notifyDataChangeForBackup();
+  }
+  if (location.hash && ['pos','accounts','inventory','transactions','dashboard','vouchers','currencies','reports','chat'].includes(state.route)) {
     refreshTopbar();
   }
 });
@@ -322,13 +352,16 @@ function onHash() {
 
 // ---- تشغيل ----
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    reg.update().catch(() => {});
+  }).catch(() => {});
 }
 async function main() {
   await store.load();
   state.user = store.findBy('users', u => u.me) || null;
   setupBoot();
   setupPin();
+  initNotificationEngine();
   window.addEventListener('hashchange', onHash);
   // إعداد السجل
   if (location.hash) { const { route, params } = parseHash(location.hash); state.route = route; state.params = params; }

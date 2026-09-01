@@ -171,6 +171,69 @@ try {
     const bal2 = store.balance(acc.id);
     ok('balance = 700 after edit via UI', bal2 === 700);
 
+  // 4) اختبار نظام المبيعات ونقاط البيع (POS) والمبيعات الآجلة والجزئية وربط الديون والمخزون
+  const posFab = document.getElementById('btn-pos-fab');
+  ok('POS bottom-left fab button exists', !!posFab);
+
+  window.location.hash = '#/pos';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await new Promise(r => setTimeout(r, 100));
+
+  const posTitle = document.querySelector('.view-title');
+  ok('POS view rendered', posTitle && posTitle.textContent.includes('المبيعات'));
+
+  // إنشاء صنف مخزون جديد لاختبار البيع والخصم من المخزون
+  const saleItem = await store.save('items', { id: 'item-pos-test', name: 'تمر فاخر', unit: 'كيلو', quantity: 20, buyPrice: 50, sellPrice: 100, alertQty: 3, notes: '' });
+  window.location.hash = '#/pos';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await new Promise(r => setTimeout(r, 80));
+
+  // النقر على الصنف لإضافته للسلة
+  const itemCard = document.querySelector(`[data-item-id="item-pos-test"]`);
+  ok('POS shows inventory product card', !!itemCard);
+  if (itemCard) itemCard.click();
+  await new Promise(r => setTimeout(r, 50));
+
+  const cartCount = document.getElementById('pos-cart-count');
+  ok('item added to POS cart', cartCount && cartCount.textContent === '1');
+
+  // اختيار العميل
+  const custSelect = document.getElementById('pos-customer-select');
+  if (custSelect) {
+    custSelect.value = acc.id;
+    custSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+  }
+
+  // اختيار دفع جزئي: الإجمالي 100، دفع 40 نقداً، المتبقي 60 دين
+  const partialRadio = document.querySelector('input[name="pos_pay"][value="partial"]');
+  if (partialRadio) {
+    partialRadio.checked = true;
+    partialRadio.dispatchEvent(new window.Event('change', { bubbles: true }));
+  }
+  const paidInput = document.getElementById('pos-paid-amount');
+  if (paidInput) {
+    paidInput.value = '40';
+    paidInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  }
+
+  const initialBal = store.balance(acc.id); // كان 700
+  // إتمام البيع
+  const submitBtn = document.getElementById('pos-submit-btn');
+  if (submitBtn) submitBtn.click();
+  await new Promise(r => setTimeout(r, 300));
+
+  const finalBal = store.balance(acc.id);
+  // الرصيد يجب أن يزيد بمقدار المتبقي من الدين (60): 700 + 60 = 760
+  ok('balance updated by remaining partial debt (+60)', finalBal === initialBal + 60);
+
+  // التحقق من خصم المخزون: 20 - 1 = 19
+  const updatedItem = store.get('items', 'item-pos-test');
+  ok('inventory stock decremented after POS sale', updatedItem && updatedItem.quantity === 19);
+
+  // التحقق من تخزين بنود الفاتورة كاملة
+  const latestTx = store.transactions().find(t => t.tags && t.tags.includes('فاتورة_جزئية'));
+  ok('partial invoice saved as transaction with items and debt metadata', !!latestTx && latestTx.invoiceItems.length === 1 && latestTx.paidAmount === 40 && latestTx.remainingDebt === 60);
+
   console.log(`\nتدفقات الواجهة: ${pass} نجحت، ${fail} فشلت`);
 } catch (err) {
   console.log('FLOW EXCEPTION:', err && err.stack || err);

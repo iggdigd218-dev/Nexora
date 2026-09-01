@@ -127,11 +127,16 @@ a{color:var(--primary);text-decoration:none}
 .field input,.field select,.field textarea{
   width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);
   background:var(--surface2);outline:none;transition:border var(--transition);
+  color:var(--text);font-size:15px;
+}
+.field input[type="number"]{
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
 }
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
 .field .hint{font-size:12px;color:var(--text3);margin-top:4px}
-.field-row{display:flex;gap:10px}
-.field-row .field{flex:1}
+.field-row{display:flex;gap:10px;flex-wrap:wrap}
+.field-row .field{flex:1;min-width:140px}
 
 /* ============ PIN ============ */
 .pin-card{max-width:340px}
@@ -149,6 +154,12 @@ a{color:var(--primary);text-decoration:none}
 
 /* ============ التطبيق ============ */
 .app{min-height:100vh;display:flex;flex-direction:column}
+.app-body{
+  display:flex;
+  position:relative;
+  min-height:calc(100vh - 66px);
+  width:100%;
+}
 .topbar{
   position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px;padding:12px 18px;
   background:color-mix(in srgb,var(--surface) 86%,transparent);backdrop-filter:blur(12px);
@@ -172,13 +183,66 @@ a{color:var(--primary);text-decoration:none}
   .brand-logo{width:38px;height:38px}
 }
 
-/* ============ القائمة الجانبية ============ */
-.sidebar{
-  position:fixed;inset:0 auto 0 0;width:var(--sidebar-w);background:var(--surface);
-  border-left:1px solid var(--border);padding:16px 12px;z-index:60;transform:translateX(100%);
-  transition:transform var(--transition);display:flex;flex-direction:column;overflow-y:auto;
+/* ============ القائمة الجانبية والخلفية ============ */
+.sidebar-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,.6);
+  backdrop-filter:blur(4px);
+  z-index:9998;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transition:opacity 0.22s ease, visibility 0.22s ease;
 }
-html[data-sidebar="open"] .sidebar{transform:none}
+html[data-sidebar="open"] .sidebar-backdrop{
+  opacity:1;
+  visibility:visible;
+  pointer-events:auto;
+}
+
+.sidebar{
+  position:fixed !important;
+  top:0 !important;
+  right:0 !important;
+  bottom:0 !important;
+  left:auto !important;
+  width:270px !important;
+  max-width:85vw !important;
+  height:100vh !important;
+  background:var(--surface) !important;
+  border-left:1px solid var(--border) !important;
+  border-right:none !important;
+  padding:16px 14px !important;
+  z-index:9999 !important;
+  transform:translateX(105%) !important;
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+  transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, visibility 0.25s ease, box-shadow 0.25s ease !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow-y:auto !important;
+}
+
+html[data-sidebar="open"] .sidebar{
+  transform:translateX(0) !important;
+  opacity:1 !important;
+  visibility:visible !important;
+  pointer-events:auto !important;
+  box-shadow:-12px 0 35px rgba(0,0,0,.35) !important;
+}
+
+.sidebar-head-mobile{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding-bottom:12px;
+  margin-bottom:12px;
+  border-bottom:1px solid var(--border);
+}
+.sidebar-head-mobile .brand-title{font-size:16px;font-weight:800}
+
 .nav{flex:1}
 .nav-item{
   display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;margin-bottom:3px;
@@ -196,11 +260,15 @@ html[data-sidebar="open"] .sidebar{transform:none}
   width:100%;justify-content:flex-start;background:linear-gradient(135deg,var(--accent),#f97316);color:#fff;
   font-weight:700;border-radius:14px;padding:13px 14px;
 }
-@media(min-width:1000px){
-  .sidebar{transform:none;position:sticky;top:0;height:100vh;border-right:none;border-left:1px solid var(--border)}
-  html[data-sidebar="open"] .sidebar{transform:none}
-  .main{max-width:calc(100% - var(--sidebar-w))}
-  #toggle-sidebar{display:none}
+
+.main{
+  flex:1;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  padding:20px;
+  overflow-x:hidden;
+  margin:0 !important;
 }
 
 /* ============ المحتوى الرئيسي ============ */
@@ -528,6 +596,56 @@ textarea.resizable{min-height:80px;resize:vertical}
 .settings-row:last-child{border-bottom:none}
 .settings-row .s-label{font-weight:600;font-size:14px}
 .settings-row .s-desc{font-size:12px;color:var(--text3)}
+
+/* ============ بطاقات تبويب الإعدادات المصنفة بالأيقونات ============ */
+.settings-nav-card{
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:16px;
+  padding:14px 12px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  gap:6px;
+  cursor:pointer;
+  transition:all var(--transition);
+  user-select:none;
+}
+.settings-nav-card:hover{
+  border-color:var(--primary);
+  transform:translateY(-2px);
+  box-shadow:var(--shadow);
+}
+.settings-nav-card.active{
+  border-color:var(--primary);
+  background:color-mix(in srgb,var(--primary-soft) 40%,var(--surface));
+  box-shadow:0 6px 18px rgba(15,118,110,.18);
+}
+.settings-nav-icon{
+  width:44px;
+  height:44px;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  margin-bottom:2px;
+  box-shadow:0 4px 10px rgba(0,0,0,.1);
+}
+.settings-nav-title{
+  font-weight:800;
+  font-size:13.5px;
+  color:var(--text);
+}
+.settings-nav-sub{
+  font-size:11px;
+  color:var(--text3);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:100%;
+}
 .switch{position:relative;width:48px;height:27px;flex-shrink:0}
 .switch input{opacity:0;width:0;height:0}
 .switch .slider{position:absolute;inset:0;background:var(--border);border-radius:27px;transition:all var(--transition);cursor:pointer}
@@ -547,4 +665,435 @@ textarea.resizable{min-height:80px;resize:vertical}
   .view-actions .btn{flex:1}
   .modal{margin:0}
 }
-@media print{.fab-wrap,.topbar,.sidebar{display:none !important}}
+/* ============ زر نظام المبيعات في أسفل يسار الشاشة (POS Floating Action Button) ============ */
+.pos-fab{
+  position:fixed;
+  bottom:22px;
+  left:22px;
+  z-index:85;
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 20px;
+  border-radius:50px;
+  font-weight:800;
+  font-size:15px;
+  color:#ffffff;
+  background:linear-gradient(135deg,#0f766e,#0d9488);
+  box-shadow:0 10px 28px rgba(15,118,110,.45);
+  border:2px solid rgba(255,255,255,.2);
+  cursor:pointer;
+  transition:all var(--transition);
+  text-decoration:none;
+}
+.pos-fab:hover{
+  transform:translateY(-2px) scale(1.03);
+  box-shadow:0 14px 34px rgba(15,118,110,.55);
+}
+.pos-fab:active{transform:scale(.95)}
+.pos-fab .pos-fab-ic{font-size:22px;line-height:1}
+.pos-fab .pos-fab-label{white-space:nowrap}
+@media(max-width:640px){
+  .pos-fab{
+    bottom:16px;
+    left:16px;
+    padding:10px 14px;
+    font-size:13.5px;
+  }
+}
+
+/* ============ نظام المبيعات ونقاط البيع (POS System Styling) ============ */
+.pos-tabs{display:flex;gap:8px}
+.pos-layout{
+  display:grid;
+  grid-template-columns:1.25fr 1fr;
+  gap:20px;
+  align-items:start;
+}
+@media(max-width:1024px){
+  .pos-layout{grid-template-columns:1fr}
+}
+.pos-products-pane{display:flex;flex-direction:column;gap:14px}
+.pos-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pos-filter-tags{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.pos-chip{
+  padding:6px 14px;
+  border-radius:20px;
+  font-size:12.5px;
+  font-weight:700;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  color:var(--text2);
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all var(--transition);
+}
+.pos-chip:hover{background:var(--primary-soft);color:var(--primary)}
+.pos-chip.active{background:var(--primary);color:#fff;border-color:transparent}
+
+.pos-products-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:12px;
+  max-height:calc(100vh - 280px);
+  overflow-y:auto;
+  padding-bottom:12px;
+}
+.pos-product-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:14px;
+  cursor:pointer;
+  transition:all var(--transition);
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  gap:12px;
+}
+.pos-product-card:hover{
+  border-color:var(--primary);
+  transform:translateY(-2px);
+  box-shadow:var(--shadow);
+}
+.pos-product-card.out-of-stock{opacity:.55;background:var(--surface2)}
+.pos-p-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pos-p-name{font-size:14px;line-height:1.4;word-break:break-word}
+.pos-p-foot{display:flex;justify-content:space-between;align-items:center}
+.pos-p-price{font-size:15px;font-weight:800;color:var(--primary)}
+.pos-p-price small{font-size:11px;font-weight:600;color:var(--text3)}
+.pos-p-add-btn{
+  width:32px;
+  height:32px;
+  border-radius:8px;
+  background:var(--primary-soft);
+  color:var(--primary);
+  font-weight:900;
+  font-size:16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  transition:all var(--transition);
+}
+.pos-product-card:hover .pos-p-add-btn{background:var(--primary);color:#fff}
+
+/* سلة المبيعات */
+.pos-cart-pane{display:flex;flex-direction:column;gap:14px}
+.pos-box-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.pos-box-label{font-size:14px;font-weight:800}
+.pos-customer-status{margin-top:8px}
+.pos-cust-info{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+.pos-cart-items-box{min-height:180px}
+.pos-cart-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:260px;
+  overflow-y:auto;
+  padding-bottom:6px;
+}
+.pos-cart-row{
+  display:grid;
+  grid-template-columns:1.5fr auto 1fr auto;
+  gap:8px;
+  align-items:center;
+  padding:8px 10px;
+  border-radius:10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+}
+.pos-c-name{font-size:13px;display:block}
+.pos-c-unit-price{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-top:2px}
+.pos-c-price-input{
+  width:70px;
+  padding:2px 4px;
+  font-size:11.5px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--text);
+}
+.pos-c-qty-ctrls{display:flex;align-items:center;gap:4px}
+.pos-qty-btn{
+  width:26px;
+  height:26px;
+  border-radius:6px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  color:var(--text);
+  font-weight:bold;
+  cursor:pointer;
+}
+.pos-qty-btn:hover{background:var(--primary);color:#fff}
+.pos-qty-input{
+  width:42px;
+  text-align:center;
+  padding:3px 2px;
+  font-size:12px;
+  font-weight:700;
+  border:1px solid var(--border);
+  border-radius:6px;
+}
+.pos-c-total{text-align:left;font-size:13px}
+.pos-cart-empty{text-align:center;padding:26px 12px;color:var(--text3)}
+
+/* الدفع والتسوية */
+.pos-checkout-box{display:flex;flex-direction:column;gap:12px}
+.pos-summary-row{display:flex;justify-content:space-between;font-size:14px;color:var(--text2)}
+.pos-discount-row{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+.pos-discount-inputs{display:flex;align-items:center;gap:6px}
+.pos-summary-total{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 0;
+  border-top:1px dashed var(--border);
+  border-bottom:1px dashed var(--border);
+  font-size:16px;
+  font-weight:800;
+}
+.pos-summary-total strong{font-size:20px;color:var(--primary)}
+
+.pos-payment-methods{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+  margin-top:6px;
+}
+.pos-pay-option{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:9px 12px;
+  border-radius:10px;
+  border:1.5px solid var(--border);
+  background:var(--surface2);
+  cursor:pointer;
+  font-size:13px;
+  font-weight:700;
+  transition:all var(--transition);
+}
+.pos-pay-option input{accent-color:var(--primary)}
+.pos-pay-option.active{
+  border-color:var(--primary);
+  background:var(--primary-soft);
+  color:var(--primary);
+}
+.pos-partial-box{
+  margin-top:10px;
+  padding:12px;
+  border-radius:10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+}
+.pos-remaining-badge{
+  padding:8px 12px;
+  background:var(--danger-soft);
+  color:var(--danger);
+  font-weight:800;
+  border-radius:8px;
+  text-align:center;
+  font-size:14px;
+}
+
+.pos-action-buttons{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.pos-sub-actions{display:flex;gap:8px}
+.pos-sub-actions .btn{flex:1}
+
+/* ---- تنسيقات عرض المخزون الهرمي ومؤشرات الفئات ---- */
+.inv-stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+  gap:12px;
+  margin-bottom:16px;
+}
+.inv-stat-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px 14px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  box-shadow:var(--shadow-sm);
+}
+.inv-stat-icon{
+  width:42px;
+  height:42px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+  background:var(--surface2);
+  flex-shrink:0;
+}
+.inv-stat-val{font-size:17px;font-weight:800;color:var(--text)}
+.inv-stat-lbl{font-size:11.5px;color:var(--text-muted);margin-top:1px}
+
+.inv-hierarchy-container{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.inv-category-card{
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:var(--shadow-sm);
+  transition:border-color var(--transition);
+}
+.inv-category-card:hover{
+  border-color:var(--primary-soft);
+}
+.inv-category-card.is-collapsed .inv-cat-body{
+  display:none;
+}
+.inv-category-card.is-collapsed .inv-cat-toggle-icon{
+  transform:rotate(180deg);
+}
+
+.inv-cat-header{
+  padding:12px 16px;
+  background:var(--surface2);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  cursor:pointer;
+  user-select:none;
+}
+.inv-cat-title-wrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:200px;
+}
+.inv-cat-icon-badge{
+  width:36px;
+  height:36px;
+  border-radius:9px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+  flex-shrink:0;
+}
+.inv-cat-name{
+  font-size:15px;
+  font-weight:800;
+  color:var(--text);
+}
+.inv-cat-meta{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.inv-cat-indicators{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.inv-indicator-pill{
+  font-size:11.5px;
+  font-weight:700;
+  padding:3px 9px;
+  border-radius:12px;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+}
+.inv-indicator-pill.ok{
+  background:var(--success-soft);
+  color:var(--success);
+}
+.inv-indicator-pill.warn{
+  background:var(--warn-soft);
+  color:var(--warn);
+}
+.inv-indicator-pill.danger{
+  background:var(--danger-soft);
+  color:var(--danger);
+}
+.inv-indicator-pill.neutral{
+  background:var(--surface);
+  border:1px solid var(--border);
+  color:var(--text-muted);
+}
+
+.inv-cat-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.inv-cat-toggle-icon{
+  transition:transform var(--transition);
+  font-size:13px;
+  color:var(--text-muted);
+}
+
+.inv-cat-body{
+  padding:0;
+}
+.inv-cat-empty{
+  padding:24px 16px;
+  text-align:center;
+  color:var(--text-muted);
+}
+
+.inv-stock-meter{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  min-width:90px;
+}
+.inv-stock-bar{
+  height:5px;
+  background:var(--border);
+  border-radius:3px;
+  overflow:hidden;
+}
+.inv-stock-progress{
+  height:100%;
+  border-radius:3px;
+  background:var(--success);
+}
+.inv-stock-progress.warn{background:var(--warn)}
+.inv-stock-progress.danger{background:var(--danger)}
+
+.inv-view-switch{
+  display:inline-flex;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:3px;
+  gap:2px;
+}
+.inv-view-btn{
+  border:none;
+  background:transparent;
+  padding:5px 11px;
+  border-radius:7px;
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-muted);
+  cursor:pointer;
+  transition:all var(--transition);
+}
+.inv-view-btn.active{
+  background:var(--surface);
+  color:var(--primary);
+  box-shadow:var(--shadow-sm);
+}
+
+@media print{.fab-wrap,.topbar,.sidebar,.pos-fab{display:none !important}}

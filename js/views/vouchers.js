@@ -109,18 +109,30 @@ function openVoucherForm() {
     cls: 'lg',
     body: `
       <form id="v-form">
-        <div class="field-row">
+        <div class="field-row" style="margin-bottom:8px">
           ${field({ type: 'select', name: 'type', label: 'نوع السند', value: 'receipt', options: Object.entries(VOUCHER_TYPES).map(([k,v]) => ({ value: k, label: v.icon + ' ' + v.label })) })}
           ${field({ type: 'select', name: 'accountId', label: 'الحساب', value: accs[0] ? accs[0].id : '', options: accs.map(a => ({ value: a.id, label: ACCOUNT_KINDS[a.kind].icon + ' ' + a.name })) })}
         </div>
-        <div class="field-row">
-          ${field({ type: 'date', name: 'date', label: 'التاريخ', value: todayISO() })}
-          ${field({ type: 'select', name: 'currency', label: 'العملة', value: st.defaultCurrency || 'YER', options: store.getCurrencies().map(c => ({ value: c.code, label: c.name + ' (' + c.symbol + ')' })) })}
+        <div class="field" style="margin-bottom:10px">
+          <label style="font-weight:800;font-size:14px;color:var(--text);margin-bottom:4px">💵 المبلغ والعملة *</label>
+          <div style="display:flex;gap:6px;align-items:center;width:100%">
+            <input type="number" id="f-amount" name="amount" step="any" inputmode="decimal" placeholder="0.00" required style="flex:1;min-width:0;padding:10px 14px;border-radius:12px;border:2px solid var(--primary);background:var(--surface);font-size:22px;font-weight:800;color:var(--text)">
+            <select name="currency" class="select" title="العملة" style="width:75px;min-width:65px;max-width:85px;font-weight:800;font-size:14px;padding:10px 6px;text-align:center;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2)">
+              ${store.getCurrencies().map(c => `<option value="${esc(c.code)}" ${c.code===(st.defaultCurrency||'YER')?'selected':''}>${esc(c.symbol || c.code)}</option>`).join('')}
+            </select>
+          </div>
         </div>
-        ${field({ type: 'text', name: 'amount', label: 'المبلغ', required: true, placeholder: '0.00' })}
-        ${field({ type: 'textarea', name: 'desc', label: 'بيان السند / وصف العملية', value: '' })}
-        ${field({ type: 'textarea', name: 'notes', label: 'ملاحظات إضافية', value: '' })}
-        ${field({ type: 'text', name: 'receiver', label: 'اسم المستلم', value: st.defaultReceiver || '' })}
+        <div class="field-row" style="margin-bottom:8px">
+          ${field({ type: 'date', name: 'date', label: 'التاريخ', value: todayISO() })}
+          ${field({ type: 'text', name: 'receiver', label: 'اسم المستلم', value: st.defaultReceiver || '' })}
+        </div>
+        ${field({ type: 'text', name: 'desc', label: 'بيان السند / وصف العملية', value: '', placeholder: 'بيان السند...' })}
+        <details style="margin-top:6px;border:1px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface2)">
+          <summary style="font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none">⚙️ ملاحظات إضافية</summary>
+          <div style="margin-top:8px">
+            ${field({ type: 'textarea', name: 'notes', label: 'ملاحظات إضافية', value: '' })}
+          </div>
+        </details>
       </form>`,
     foot: `<button class="btn ghost" data-close>إلغاء</button><button class="btn primary" id="v-save">معاينة وحفظ</button>`,
   });

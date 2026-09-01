@@ -1,5 +1,5 @@
 // العمليات المالية — إدخال سريع، أرصدة تلقائية، تفاصيل الفاتورة ومشاركة السند
-import { $, $$, esc, fmt, uid, todayISO, nowTime, fmtDate, fmtDateTime, printHTML, exportExcel } from '../utils.js';
+import { $, $$, esc, fmt, uid, todayISO, nowTime, fmtDate, fmtDateTime, printHTML, exportExcel, openWhatsApp, openSMS, cleanPhoneNumber } from '../utils.js';
 import { store } from '../store.js';
 import { toast, toastErr, confirmDialog, openModal, field, readForm, handleAttachment, numberToWords } from '../components.js';
 import { accountBalance, ACCOUNT_KINDS, OP_TYPES, opEffect } from '../accounting.js';
@@ -155,9 +155,9 @@ export function openTxForm(existing, presetAccountId, isCopy) {
     cls: 'lg',
     body: `
       <form id="tx-form">
-        <div class="field-row">
-          ${field({ type: 'select', name: 'accountId', label: 'الحساب', value: t.accountId || defaultAccId || '', options: accs.map(a => ({ value: a.id, label: (ACCOUNT_KINDS[a.kind] || {}).icon + ' ' + a.name + ' — ' + esc(store.currency(a.currency).symbol) })) })}
-          ${field({ type: 'select', name: 'type', label: 'نوع العملية', value: t.type || 'in', options: Object.entries(OP_TYPES).map(([k,v]) => ({ value: k, label: v.icon + ' ' + v.label })) })}
+        <div class="field-row" style="margin-bottom:8px">
+          ${field({ type: 'select', name: 'accountId', label: 'الحساب *', value: t.accountId || defaultAccId || '', options: accs.map(a => ({ value: a.id, label: (ACCOUNT_KINDS[a.kind] || {}).icon + ' ' + a.name + ' — ' + esc(store.currency(a.currency).symbol) })) })}
+          ${field({ type: 'select', name: 'type', label: 'نوع العملية *', value: t.type || 'in', options: Object.entries(OP_TYPES).map(([k,v]) => ({ value: k, label: v.icon + ' ' + v.label })) })}
         </div>
         <div id="tx-type-hint"></div>
         <div id="tx-transfer-box" class="hidden"></div>
@@ -165,45 +165,58 @@ export function openTxForm(existing, presetAccountId, isCopy) {
           <div class="invoice-box-head"><div><b>🛒 تفاصيل البيع</b><div class="hint">اختياري: تظهر البنود في السند والصورة ورسالة واتساب.</div></div><button type="button" class="btn soft sm" data-add-invoice-line>＋ إضافة صنف</button></div>
           <div id="tx-invoice-lines"></div>
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label>المبلغ *</label>
-            <div style="display:flex;gap:6px">
-              <input type="number" id="tx-amount" name="amount" step="any" value="${esc(t.amount ?? '')}" placeholder="0.00" style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2)">
-              <select id="tx-currency" name="currency" class="select" style="width:110px">
-                ${store.getCurrencies().map(c => `<option value="${esc(c.code)}" ${c.code===defaultCur?'selected':''}>${esc(c.symbol)}</option>`).join('')}
-              </select>
-            </div>
+
+        <!-- حقل المبلغ المالي بتصميم واسع ومريح مع عملة مختصرة وحاسبة سريعة -->
+        <div class="field" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <label style="font-weight:800;font-size:14px;color:var(--text);margin:0">💵 المبلغ المطلوب تسجيله *</label>
+            <button type="button" id="tx-calc-hint" class="btn soft sm" style="padding:2px 8px;font-size:12px;height:auto">🧮 حاسبة سريعة</button>
           </div>
-          <div class="field">
-            <label>سعر الصرف (إلى عملة الحساب إن اختلفت)</label>
-            <input type="number" id="tx-rate" name="rate" step="any" value="${esc(t.rate ?? 1)}" style="padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);width:100%">
+          <div style="display:flex;gap:6px;align-items:center;width:100%">
+            <input type="number" id="tx-amount" name="amount" step="any" inputmode="decimal" value="${esc(t.amount ?? '')}" placeholder="0.00" style="flex:1;min-width:0;padding:10px 14px;border-radius:12px;border:2px solid var(--primary);background:var(--surface);font-size:22px;font-weight:800;color:var(--text);outline:none">
+            <select id="tx-currency" name="currency" class="select" title="العملة" style="width:75px;min-width:65px;max-width:85px;font-weight:800;font-size:14px;padding:10px 6px;text-align:center;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2)">
+              ${store.getCurrencies().map(c => `<option value="${esc(c.code)}" ${c.code===defaultCur?'selected':''}>${esc(c.symbol || c.code)}</option>`).join('')}
+            </select>
           </div>
         </div>
-        <div class="field-row">
+
+        <div class="field-row" style="margin-bottom:8px">
           ${field({ type: 'date', name: 'date', label: 'التاريخ', value: t.date || todayISO() })}
-          ${field({ type: 'time', name: 'time', label: 'الوقت', value: t.time || nowTime() })}
+          ${field({ type: 'text', name: 'desc', label: 'البيان / الوصف', value: t.desc || '', placeholder: 'بيان العملية (مثال: دفعة حساب، مبيعات)' })}
         </div>
-        ${field({ type: 'textarea', name: 'desc', label: 'البيان / الوصف', value: t.desc || '' })}
-        <div class="field-row">
-          ${field({ type: 'text', name: 'ref', label: 'رقم مرجعي', value: t.ref || '' })}
-          ${field({ type: 'text', name: 'tags', label: 'علامات', value: (t.tags||[]).join(', ') })}
-        </div>
-        ${field({ type: 'select', name: 'status', label: 'حالة العملية', value: t.status || 'completed', options: [{value:'completed',label:'مكتملة'},{value:'pending',label:'معلقة'},{value:'cancelled',label:'ملغاة'}] })}
-        <div class="field"><label>مرفقات / صور فواتير</label><input type="file" id="tx-att" multiple accept="image/*,.pdf"></div>
-        <div id="tx-att-preview"></div>
-        ${t.type === 'debit' || !t.type ? '<div class="hint invoice-send-hint">عند حفظ بيع آجل سيتم تجهيز سند بصورة البنود وإرساله مع النص إلى واتساب العميل. إذا لم يدعم الجهاز إرفاق الملفات سيظهر تنبيه ولن يُرسل النص وحده.</div>' : ''}
+
+        <details style="margin-top:6px;border:1px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface2)">
+          <summary style="font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none">⚙️ خيارات إضافية (الوقت، الرقم المرجعي، المرفقات)</summary>
+          <div style="margin-top:10px">
+            <div class="field-row">
+              ${field({ type: 'time', name: 'time', label: 'الوقت', value: t.time || nowTime() })}
+              ${field({ type: 'text', name: 'ref', label: 'رقم مرجعي / إيصال', value: t.ref || '' })}
+            </div>
+            <div class="field-row">
+              ${field({ type: 'text', name: 'tags', label: 'علامات Tags', value: (t.tags||[]).join(', ') })}
+              ${field({ type: 'select', name: 'status', label: 'حالة العملية', value: t.status || 'completed', options: [{value:'completed',label:'مكتملة'},{value:'pending',label:'معلقة'},{value:'cancelled',label:'ملغاة'}] })}
+            </div>
+            <div class="field"><label>مرفقات / صور فواتير</label><input type="file" id="tx-att" multiple accept="image/*,.pdf"></div>
+            <div id="tx-att-preview"></div>
+          </div>
+        </details>
+        ${t.type === 'debit' || !t.type ? '<div class="hint invoice-send-hint" style="margin-top:6px">عند حفظ بيع آجل سيتم تجهيز سند بصورة البنود وتوجيهه فوراً إلى واتساب العميل.</div>' : ''}
       </form>`,
     foot: `<button class="btn ghost" data-close>إلغاء</button><button class="btn primary" id="tx-save">💾 حفظ</button>`,
   });
 
-  // آلة حاسبة سريعة
+  // ربط الآلة الحاسبة السريعة والتركيز التلقائي على حقل المبلغ
   const amountBox = $('#tx-amount', m.overlay);
-  const calcHint = document.createElement('div');
-  calcHint.style.cssText = 'font-size:12px;color:var(--text3);margin-top:4px;cursor:pointer';
-  calcHint.textContent = '🧮 آلة حاسبة سريعة';
-  amountBox.parentElement.appendChild(calcHint);
-  calcHint.onclick = () => openQuickCalc(amountBox);
+  const calcHintBtn = $('#tx-calc-hint', m.overlay);
+  if (calcHintBtn && amountBox) {
+    calcHintBtn.onclick = () => openQuickCalc(amountBox);
+  }
+  setTimeout(() => {
+    if (amountBox) {
+      amountBox.focus();
+      if (!t.amount) amountBox.select();
+    }
+  }, 120);
 
   const invoiceBox = $('#tx-invoice-box', m.overlay);
   const invoiceLinesBox = $('#tx-invoice-lines', m.overlay);
@@ -521,23 +534,73 @@ export function transactionText(t) {
   const acc = t.type === 'transfer' ? store.getAccount(t.fromId) : store.getAccount(t.accountId);
   const cur = store.currency(t.currency);
   const lines = invoiceItems(t);
-  const title = t.type === 'debit' ? '🧾 بيع آجل / جزئي' : `📄 ${op.label}`;
-  const out = [
-    `${title}${st.businessName ? ` — ${st.businessName}` : ''}`,
-    `التاريخ: ${t.date || '—'}${t.time ? ` ${t.time}` : ''}`,
-    `العميل/الحساب: ${acc ? acc.name : '—'}`,
-  ];
-  if (acc && (acc.phone || acc.whatsapp)) out.push(`الهاتف: ${acc.whatsapp || acc.phone}`);
-  if (lines.length) {
-    out.push('تفاصيل الأصناف:');
-    lines.forEach((line, index) => out.push(`${index + 1}. ${line.name} — الكمية: ${fmt(line.quantity, quantityDecimals(line.quantity))} ${line.unit}، سعر الوحدة: ${fmt(line.unitPrice, cur.decimal)} ${cur.symbol}، إجمالي البند: ${fmt(lineTotal(line), cur.decimal)} ${cur.symbol}`));
+  const bal = acc ? store.balance(acc.id) : null;
+  const isDebit = t.type === 'debit';
+  const isPartial = (t.tags && (t.tags.includes('فاتورة_جزئية') || t.tags.includes('دين_جزئي'))) || (t.paidAmount !== undefined && t.remainingDebt !== undefined);
+  const business = st.businessName || 'مركز عثمان الوصابي';
+  const phone = st.phone || st.whatsapp || '';
+
+  const title = isPartial ? '🧾 فاتورة مبيعات جزئية' : (isDebit ? '🧾 سند مبيعات آجل (دين)' : `📄 ${op.label}`);
+  const linesOut = [];
+  
+  if (acc && acc.name) {
+    linesOut.push(`مرحباً بك أ/ *${acc.name}* 🌹`);
   }
-  out.push(`الإجمالي: ${fmt(t.amount, cur.decimal)} ${cur.symbol}`);
-  out.push(`العملة: ${cur.name} (${cur.symbol})`);
-  if (t.desc) out.push(`البيان: ${t.desc}`);
-  if (t.ref) out.push(`المرجع: ${t.ref}`);
-  out.push(`الحالة: ${t.status === 'completed' ? 'مكتملة' : t.status === 'cancelled' ? 'ملغاة' : (t.status || 'معلقة')}`);
-  return out.join('\n');
+  linesOut.push(`إشعار عملية جديدة لدى *${business}*:`);
+  linesOut.push(`────────────────────`);
+  linesOut.push(`🔖 *نوع السند:* ${title}`);
+  if (t.ref) linesOut.push(`🔢 *رقم المرجع:* ${t.ref}`);
+  linesOut.push(`🗓️ *التاريخ والوقت:* ${t.date || '—'}${t.time ? ` — ${t.time}` : ''}`);
+  if (acc) linesOut.push(`👤 *الحساب:* ${acc.name}${acc.phone ? ` (${acc.phone})` : ''}`);
+
+  if (lines.length) {
+    linesOut.push(`────────────────────`);
+    linesOut.push(`🛍️ *تفاصيل الأصناف (${lines.length}):*`);
+    lines.forEach((line, index) => {
+      linesOut.push(`${index + 1}. *${line.name}* — الكمية: ${fmt(line.quantity, quantityDecimals(line.quantity))} ${line.unit || 'حبة'}، سعر الوحدة: ${fmt(line.unitPrice, cur.decimal)} ${cur.symbol}، إجمالي البند: ${fmt(lineTotal(line), cur.decimal)} ${cur.symbol}`);
+    });
+  }
+
+  linesOut.push(`────────────────────`);
+  linesOut.push(`💰 الإجمالي: ${fmt(t.amount, cur.decimal)} ${cur.symbol}`);
+  
+  if (isPartial) {
+    if (t.paidAmount !== undefined) linesOut.push(`💵 *المدفوع نقداً:* ${fmt(t.paidAmount, cur.decimal)} ${cur.symbol}`);
+    if (t.remainingDebt !== undefined) linesOut.push(`📝 *المتبقي كدين (عليك):* *${fmt(t.remainingDebt, cur.decimal)} ${cur.symbol}*`);
+  }
+
+  if (bal !== null) {
+    const balState = bal > 0 ? '(عليك)' : (bal < 0 ? '(لك)' : '(خالص)');
+    linesOut.push(`📊 *الرصيد بعد العملية:* *${fmt(Math.abs(bal), cur.decimal)} ${cur.symbol} ${balState}*`);
+  }
+
+  if (t.desc) linesOut.push(`📝 *البيان:* ${t.desc}`);
+  linesOut.push(`────────────────────`);
+  linesOut.push(`شكراً لتعاملكم معنا - نتمنى لكم أطيب الأوقات 🌹`);
+  if (phone) linesOut.push(`📞 للتواصل والاستفسار: ${phone}`);
+
+  return linesOut.join('\n');
+}
+
+export function transactionSmsText(t) {
+  const st = store.settings();
+  const acc = t.type === 'transfer' ? store.getAccount(t.fromId) : store.getAccount(t.accountId);
+  const cur = store.currency(t.currency);
+  const bal = acc ? store.balance(acc.id) : null;
+  const isPartial = (t.tags && (t.tags.includes('فاتورة_جزئية') || t.tags.includes('دين_جزئي'))) || (t.paidAmount !== undefined && t.remainingDebt !== undefined);
+  const business = st.businessName || 'مركز عثمان الوصابي';
+  const ref = t.ref || (t.id ? t.id.slice(-6) : '');
+  
+  let text = `${business}: سند ${ref} للعميل ${acc ? acc.name : ''}. `;
+  text += `المبلغ: ${fmt(t.amount, cur.decimal)} ${cur.symbol}. `;
+  if (isPartial) {
+    text += `(مدفوع: ${fmt(t.paidAmount || 0)} | متبقي دين: ${fmt(t.remainingDebt || 0)}). `;
+  }
+  if (bal !== null) {
+    text += `الرصيد: ${fmt(Math.abs(bal), cur.decimal)} ${cur.symbol} (${bal > 0 ? 'عليك' : bal < 0 ? 'لك' : 'خالص'}). `;
+  }
+  text += `التاريخ: ${t.date || ''}. شكراً لتعاملكم.`;
+  return text;
 }
 
 export function receiptHTML(t) {
@@ -547,7 +610,9 @@ export function receiptHTML(t) {
   const cur = store.currency(t.currency);
   const lines = invoiceItems(t);
   const totalLines = lines.reduce((sum, line) => sum + lineTotal(line), 0);
-  const title = t.type === 'debit' ? 'سند بيع آجل' : op.label;
+  const isPartial = (t.tags && (t.tags.includes('فاتورة_جزئية') || t.tags.includes('دين_جزئي'))) || (t.paidAmount !== undefined && t.remainingDebt !== undefined);
+  const title = isPartial ? 'فاتورة مبيعات جزئية' : (t.type === 'debit' ? 'سند بيع آجل (دين)' : op.label);
+  const bal = acc ? store.balance(acc.id) : null;
   const logo = st.logo
     ? `<img src="${esc(st.logo)}" alt="الشعار" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="receipt-logo-fallback" style="display:none">${esc(st.businessName || 'المؤسسة')}</span>`
     : `<span class="receipt-logo-fallback">${esc(st.businessName || 'المؤسسة')}</span>`;
@@ -559,6 +624,9 @@ export function receiptHTML(t) {
       ${lines.length ? `<table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>إجمالي البند</th></tr></thead><tbody>${lines.map(line => `<tr><td>${esc(line.name)}</td><td>${fmt(line.quantity, quantityDecimals(line.quantity))} ${esc(line.unit)}</td><td>${fmt(line.unitPrice, cur.decimal)} ${esc(cur.symbol)}</td><td><b>${fmt(lineTotal(line), cur.decimal)} ${esc(cur.symbol)}</b></td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">إجمالي البنود</td><td>${fmt(totalLines, cur.decimal)} ${esc(cur.symbol)}</td></tr></tfoot></table>` : `<div class="receipt-row"><span>البيان</span><b>${esc(t.desc || '—')}</b></div>`}
       ${lines.length && t.desc ? `<div class="receipt-row"><span>البيان</span><b>${esc(t.desc)}</b></div>` : ''}
       ${t.ref ? `<div class="receipt-row"><span>المرجع</span><b>${esc(t.ref)}</b></div>` : ''}
+      ${isPartial && t.paidAmount !== undefined ? `<div class="receipt-row" style="color:var(--success)"><span>المدفوع نقداً</span><b>${fmt(t.paidAmount, cur.decimal)} ${esc(cur.symbol)}</b></div>` : ''}
+      ${isPartial && t.remainingDebt !== undefined ? `<div class="receipt-row" style="color:var(--danger)"><span>المتبقي كدين (عليك)</span><b>${fmt(t.remainingDebt, cur.decimal)} ${esc(cur.symbol)}</b></div>` : ''}
+      ${bal !== null ? `<div class="receipt-row" style="font-weight:bold;background:var(--surface2);padding:6px 10px;border-radius:8px"><span>الرصيد بعد العملية</span><b>${fmt(Math.abs(bal), cur.decimal)} ${esc(cur.symbol)} (${bal > 0 ? 'عليه' : bal < 0 ? 'له' : 'خالص'})</b></div>` : ''}
     </div>
     <div class="receipt-grand"><div><small>الإجمالي</small><strong>${fmt(t.amount, cur.decimal)} ${esc(cur.symbol)}</strong></div><div class="receipt-words">فقط ${esc(numberToWords(t.amount))} ${esc(cur.name)} لا غير</div></div>
     <div class="receipt-footer">${esc(st.voucherFooter || 'هذا السند آلي ولا يحتاج إلى ختم أو توقيع.')}</div>
@@ -572,27 +640,73 @@ export function printTransaction(t) {
 
 async function openReceiptPreview(t) {
   const m = openModal({
-    title: '🧾 معاينة سند العملية',
+    title: '🧾 سند العملية ومشاركته',
     cls: 'xl',
-    body: `<div id="receipt-preview-html">${receiptHTML(t)}</div><div id="receipt-image-state" class="muted" style="margin-top:10px;text-align:center">جارٍ تجهيز صورة السند...</div>`,
-    foot: `<button class="btn ghost" data-close>إغلاق</button><button class="btn ghost" data-receipt-print>🖨️ طباعة / PDF</button><button class="btn soft" data-receipt-download disabled>⬇️ حفظ الصورة</button><button class="btn primary" data-receipt-wa disabled>🟢 واتساب</button>`,
+    body: `
+      <div id="receipt-preview-html">${receiptHTML(t)}</div>
+      <div id="receipt-image-state" class="muted" style="margin-top:14px;text-align:center">جارٍ تجهيز صورة السند بجودة عالية...</div>
+      <div class="share-options-box" style="margin-top:16px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)">
+        <div style="font-weight:bold;margin-bottom:8px">📲 خيارات إرسال الإشعار والمشاركة السريعة:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary sm" id="modal-send-wa">🟢 واتساب العادي</button>
+          <button class="btn secondary sm" id="modal-send-wab">💼 واتساب للأعمال</button>
+          <button class="btn soft sm" id="modal-send-sms">💬 رسائل SMS</button>
+          <button class="btn ghost sm" id="modal-send-share">📤 مشاركة عامة</button>
+        </div>
+      </div>
+    `,
+    foot: `<button class="btn ghost" data-close>إغلاق</button><button class="btn ghost" data-receipt-print>🖨️ طباعة / PDF</button><button class="btn soft" data-receipt-download disabled>⬇️ تنزيل الصورة (HD)</button>`,
   });
   const stateBox = $('#receipt-image-state', m.overlay);
   const image = await generateReceiptImage(t);
   if (!document.body.contains(m.overlay)) return;
+  
   if (image) {
     try { await store.save('transactions', { ...t, receiptImage: image }, { silent: true, noActivity: true }); } catch (_) {}
-    stateBox.innerHTML = `<img src="${esc(image)}" alt="صورة سند العملية" style="max-width:100%;border:1px solid var(--border);border-radius:12px;margin-top:8px">`;
+    stateBox.innerHTML = `<img src="${esc(image)}" alt="صورة سند العملية" style="max-width:100%;border:1.5px solid var(--border);border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,0.06);margin-top:8px">`;
     const download = $('[data-receipt-download]', m.overlay);
-    const wa = $('[data-receipt-wa]', m.overlay);
     download.disabled = false;
-    wa.disabled = false;
     download.onclick = () => downloadDataUrl('receipt-' + (t.id || 'transaction') + '.png', image);
-    wa.onclick = () => shareTransactionReceipt(t);
   } else {
-    stateBox.innerHTML = '<span style="color:var(--danger)">تعذّر توليد صورة السند. لم يتم إرسال النص وحده؛ استخدم الطباعة/PDF أو أصلح دعم الصور في الجهاز.</span>';
+    stateBox.innerHTML = '<span style="color:var(--danger)">تعذّر توليد صورة السند عبر المتصفح؛ يمكنك استخدام خيارات المشاركة أو الطباعة.</span>';
   }
+
   $('[data-receipt-print]', m.overlay).onclick = () => printTransaction(t);
+  $('#modal-send-wa', m.overlay).onclick = () => dispatchTransactionNotification(t, { forceChannel: 'whatsapp', waType: 'regular' });
+  $('#modal-send-wab', m.overlay).onclick = () => dispatchTransactionNotification(t, { forceChannel: 'whatsapp', waType: 'business' });
+  $('#modal-send-sms', m.overlay).onclick = () => dispatchTransactionNotification(t, { forceChannel: 'sms' });
+  $('#modal-send-share', m.overlay).onclick = () => dispatchTransactionNotification(t, { forceChannel: 'share' });
+}
+
+// دالة مساعدة لرسم مستطيل بحواف مستديرة على Canvas
+function drawRoundedRect(ctx, x, y, width, height, radius, fillStyle = null, strokeStyle = null, lineWidth = 1) {
+  ctx.save();
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(x, y, width, height, radius);
+  } else {
+    const r = typeof radius === 'number' ? radius : 10;
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+  ctx.closePath();
+  if (fillStyle) {
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export async function generateReceiptImage(t) {
@@ -601,88 +715,262 @@ export async function generateReceiptImage(t) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext && canvas.getContext('2d');
     if (!ctx) return null;
+
     const st = store.settings();
     const cur = store.currency(t.currency);
+    const isYER = cur.code === 'YER' || cur.symbol === 'ر.ي' || cur.name === 'الريال اليمني';
+    const curLabel = isYER ? 'محلي' : cur.symbol;
+
     const acc = t.type === 'transfer' ? store.getAccount(t.fromId) : store.getAccount(t.accountId);
+    const balance = acc ? store.balance(acc.id) : 0;
     const lines = invoiceItems(t);
-    const width = 1200;
-    const height = Math.max(820, 720 + lines.length * 82);
+    const isDebit = t.type === 'debit';
+    const isPartial = (t.tags && (t.tags.includes('فاتورة_جزئية') || t.tags.includes('دين_جزئي'))) || (t.paidAmount !== undefined && t.remainingDebt !== undefined);
+
+    const width = 1080;
+    let computedHeight = 1180;
+    if (lines.length > 0) computedHeight += (lines.length * 68) + 60;
+    if (isPartial) computedHeight += 90;
+    if (t.desc && t.desc.length > 30) computedHeight += 40;
+
+    const height = Math.max(1260, computedHeight);
     canvas.width = width;
     canvas.height = height;
+
+    // خلفية بيضاء نقية
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
     ctx.direction = 'rtl';
     ctx.textAlign = 'right';
-    const right = width - 64;
-    const draw = (text, x, y, font = '28px Tahoma, Arial, sans-serif', color = '#111827') => {
-      ctx.font = font;
-      ctx.fillStyle = color;
-      ctx.fillText(fitCanvasText(ctx, String(text ?? ''), 620), x, y);
-    };
-    const drawLeft = (text, x, y, font = '24px Tahoma, Arial, sans-serif', color = '#111827') => {
-      ctx.textAlign = 'left';
-      ctx.font = font;
-      ctx.fillStyle = color;
-      ctx.fillText(fitCanvasText(ctx, String(text ?? ''), 420), x, y);
-      ctx.textAlign = 'right';
-    };
+
+    const rightMargin = width - 64;
+    const leftMargin = 64;
+    const contentWidth = width - 128;
+
+    // 1. الترويسة العلوية الفيروزية المماثلة تماماً للصورة (#0f766e)
+    const headerHeight = 220;
     ctx.fillStyle = '#0f766e';
-    ctx.fillRect(0, 0, width, 14);
-    draw(st.businessName || 'مؤسسة', right, 78, '700 38px Tahoma, Arial, sans-serif', '#0f766e');
-    draw(st.businessNameEn || '', right, 116, '22px Tahoma, Arial, sans-serif', '#4b5563');
-    draw(t.type === 'debit' ? 'سند بيع آجل' : ((OP_TYPES[t.type] || OP_TYPES.in).label), right, 166, '700 34px Tahoma, Arial, sans-serif', '#111827');
-    draw(`التاريخ: ${t.date || '—'} ${t.time || ''}`, right, 208, '22px Tahoma, Arial, sans-serif', '#4b5563');
-    draw(`الحساب: ${acc ? acc.name : '—'}`, right, 242, '22px Tahoma, Arial, sans-serif', '#4b5563');
+    ctx.fillRect(0, 0, width, headerHeight);
+
+    // معالجة الشعار والترويسة
+    let textStartX = rightMargin;
     if (st.logo) {
       try {
         const image = await loadImage(st.logo);
         if (image) {
-          const size = 132;
-          const ratio = Math.min(size / image.width, size / image.height);
+          const boxSize = 148;
+          const boxX = rightMargin - boxSize;
+          const boxY = 36;
+          // صندوق الشعار الأبيض الدائري
+          drawRoundedRect(ctx, boxX, boxY, boxSize, boxSize, 22, '#ffffff', '#14b8a6', 2);
+          const ratio = Math.min((boxSize - 16) / image.width, (boxSize - 16) / image.height);
           const w = image.width * ratio;
           const h = image.height * ratio;
-          ctx.drawImage(image, 64 + (size - w) / 2, 36 + (size - h) / 2, w, h);
+          ctx.drawImage(image, boxX + (boxSize - w) / 2, boxY + (boxSize - h) / 2, w, h);
+          textStartX = boxX - 28;
         }
-      } catch (_) {
-        // الترويسة النصية المرسومة أعلاه هي البديل عند غياب الشعار أو فشل تحميله.
-      }
+      } catch (_) {}
     }
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(64, 276); ctx.lineTo(width - 64, 276); ctx.stroke();
-    let y = 326;
-    draw('تفاصيل العملية', right, y, '700 26px Tahoma, Arial, sans-serif', '#0f766e');
-    y += 52;
-    if (lines.length) {
-      ctx.fillStyle = '#f0fdfa'; ctx.fillRect(64, y - 30, width - 128, 48);
-      draw('الصنف', right - 10, y, '700 22px Tahoma, Arial, sans-serif', '#115e59');
-      drawLeft('الكمية', 600, y, '700 22px Tahoma, Arial, sans-serif', '#115e59');
-      drawLeft('سعر الوحدة', 390, y, '700 22px Tahoma, Arial, sans-serif', '#115e59');
-      drawLeft('الإجمالي', 160, y, '700 22px Tahoma, Arial, sans-serif', '#115e59');
-      y += 58;
-      for (const line of lines) {
-        draw(line.name, right - 10, y, '700 22px Tahoma, Arial, sans-serif');
-        drawLeft(`${fmt(line.quantity, quantityDecimals(line.quantity))} ${line.unit}`, 600, y, '22px Tahoma, Arial, sans-serif');
-        drawLeft(`${fmt(line.unitPrice, cur.decimal)} ${cur.symbol}`, 390, y, '22px Tahoma, Arial, sans-serif');
-        drawLeft(`${fmt(lineTotal(line), cur.decimal)} ${cur.symbol}`, 160, y, '700 22px Tahoma, Arial, sans-serif');
-        ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(64, y + 25); ctx.lineTo(width - 64, y + 25); ctx.stroke();
-        y += 64;
-      }
+
+    // كتابة بيانات المؤسسة بالترويسة
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 36px Tahoma, "Segoe UI", Arial, sans-serif';
+    ctx.fillText(fitCanvasText(ctx, st.businessName || 'مركز عثمان الوصابي', textStartX - leftMargin), textStartX, 84);
+
+    ctx.fillStyle = '#e6fffa';
+    ctx.font = '24px Tahoma, "Segoe UI", Arial, sans-serif';
+    const bPhone = st.phone || st.whatsapp || '774190040';
+    ctx.fillText(fitCanvasText(ctx, bPhone, textStartX - leftMargin), textStartX, 130);
+
+    ctx.fillStyle = '#ccfbf1';
+    ctx.font = '22px Tahoma, "Segoe UI", Arial, sans-serif';
+    const bAddr = st.address || 'ارحب - خط بوسان';
+    ctx.fillText(fitCanvasText(ctx, bAddr, textStartX - leftMargin), textStartX, 172);
+
+    // 2. شريط السند الرمادي الفاتح (#f3f4f6)
+    const subheaderY = headerHeight;
+    const subheaderHeight = 72;
+    ctx.fillStyle = '#f3f4f6';
+    ctx.fillRect(0, 0 + subheaderY, width, subheaderHeight);
+
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 26px Tahoma, Arial, sans-serif';
+    const titleText = isPartial ? 'سند فاتورة جزئية' : (isDebit ? 'سند عملية (آجل)' : 'سند عملية');
+    ctx.fillText(titleText, rightMargin, subheaderY + 46);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#4b5563';
+    ctx.font = 'bold 24px Tahoma, Arial, sans-serif';
+    const refCode = t.ref || ('R' + (t.date || todayISO()).replace(/-/g, '').slice(2) + '-0001');
+    ctx.fillText(refCode, leftMargin, subheaderY + 46);
+    ctx.textAlign = 'right';
+
+    let currentY = subheaderY + subheaderHeight + 48;
+
+    // 3. بيانات الحساب (مماثلة للصورة: اسم الحساب، رقم الهاتف، التصنيف)
+    const drawMetaRow = (label, value, isBoldVal = true) => {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '24px Tahoma, Arial, sans-serif';
+      ctx.fillText(label, rightMargin, currentY);
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#111827';
+      ctx.font = isBoldVal ? 'bold 26px Tahoma, Arial, sans-serif' : '24px Tahoma, Arial, sans-serif';
+      ctx.fillText(fitCanvasText(ctx, String(value || '—'), 540), leftMargin, currentY);
+      ctx.textAlign = 'right';
+      currentY += 46;
+    };
+
+    drawMetaRow('اسم الحساب', acc ? acc.name : '—', true);
+    drawMetaRow('رقم الهاتف', acc ? (acc.phone || acc.whatsapp || '—') : '—', false);
+    drawMetaRow('التصنيف', acc && ACCOUNT_KINDS[acc.kind] ? ACCOUNT_KINDS[acc.kind].label : 'عام', false);
+
+    currentY += 12;
+
+    // خط فاصل رفيع
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(leftMargin, currentY);
+    ctx.lineTo(rightMargin, currentY);
+    ctx.stroke();
+
+    currentY += 36;
+
+    // 4. الصندوق البارز للمبلغ (عليه / له) بتصميم الصورة تماماً
+    const boxHeight = 110;
+    if (isDebit) {
+      // عليه (أحمر / وردي فاتح)
+      drawRoundedRect(ctx, leftMargin, currentY, contentWidth, boxHeight, 18, '#fff1f2', '#fecdd3', 2);
+      ctx.fillStyle = '#e11d48';
+      ctx.font = 'bold 32px Tahoma, Arial, sans-serif';
+      ctx.fillText('عليه', rightMargin - 32, currentY + 68);
+
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 44px Tahoma, Arial, sans-serif';
+      ctx.fillText(`${fmt(t.amount, cur.decimal)} ${curLabel}`, leftMargin + 32, currentY + 70);
+      ctx.textAlign = 'right';
     } else {
-      draw(`البيان: ${t.desc || '—'}`, right, y, '24px Tahoma, Arial, sans-serif');
-      y += 58;
+      // له (أخضر زمردي فاتح)
+      drawRoundedRect(ctx, leftMargin, currentY, contentWidth, boxHeight, 18, '#ecfdf5', '#a7f3d0', 2);
+      ctx.fillStyle = '#059669';
+      ctx.font = 'bold 32px Tahoma, Arial, sans-serif';
+      ctx.fillText('له', rightMargin - 32, currentY + 68);
+
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 44px Tahoma, Arial, sans-serif';
+      ctx.fillText(`${fmt(t.amount, cur.decimal)} ${curLabel}`, leftMargin + 32, currentY + 70);
+      ctx.textAlign = 'right';
     }
-    if (t.desc && lines.length) { draw(`البيان: ${t.desc}`, right, y, '22px Tahoma, Arial, sans-serif', '#4b5563'); y += 48; }
-    if (t.ref) { draw(`المرجع: ${t.ref}`, right, y, '22px Tahoma, Arial, sans-serif', '#4b5563'); y += 48; }
-    y += 22;
-    ctx.fillStyle = '#111827'; ctx.fillRect(64, y - 38, width - 128, 106);
-    draw('الإجمالي', right - 22, y + 2, '700 24px Tahoma, Arial, sans-serif', '#ffffff');
-    drawLeft(`${fmt(t.amount, cur.decimal)} ${cur.symbol}`, 260, y + 2, '700 32px Tahoma, Arial, sans-serif', '#ffffff');
-    y += 96;
-    draw(`فقط ${numberToWords(t.amount)} ${cur.name} لا غير`, right, y, '22px Tahoma, Arial, sans-serif', '#374151');
-    y += 52;
-    draw(st.voucherFooter || 'هذا السند آلي ولا يحتاج إلى ختم أو توقيع.', width / 2, y, '20px Tahoma, Arial, sans-serif', '#6b7280');
+
+    currentY += boxHeight + 40;
+
+    // 5. إذا كانت هناك أصناف مسجلة بالفاتورة
+    if (lines.length > 0) {
+      drawRoundedRect(ctx, leftMargin, currentY - 26, contentWidth, 46, 8, '#f8fafc', '#e2e8f0', 1);
+      ctx.fillStyle = '#0f766e';
+      ctx.font = 'bold 22px Tahoma, Arial, sans-serif';
+      ctx.fillText('الصنف', rightMargin - 16, currentY + 4);
+      
+      ctx.textAlign = 'left';
+      ctx.fillText('الكمية', leftMargin + 380, currentY + 4);
+      ctx.fillText('السعر', leftMargin + 200, currentY + 4);
+      ctx.fillText('الإجمالي', leftMargin + 20, currentY + 4);
+      ctx.textAlign = 'right';
+
+      currentY += 46;
+
+      lines.forEach(line => {
+        ctx.fillStyle = '#111827';
+        ctx.font = 'bold 22px Tahoma, Arial, sans-serif';
+        ctx.fillText(fitCanvasText(ctx, line.name, 380), rightMargin - 16, currentY);
+
+        ctx.textAlign = 'left';
+        ctx.font = '22px Tahoma, Arial, sans-serif';
+        ctx.fillStyle = '#4b5563';
+        ctx.fillText(`${fmt(line.quantity, quantityDecimals(line.quantity))} ${line.unit || 'حبة'}`, leftMargin + 380, currentY);
+        ctx.fillText(`${fmt(line.unitPrice, cur.decimal)}`, leftMargin + 200, currentY);
+        
+        ctx.font = 'bold 22px Tahoma, Arial, sans-serif';
+        ctx.fillStyle = '#111827';
+        ctx.fillText(`${fmt(lineTotal(line), cur.decimal)} ${curLabel}`, leftMargin + 20, currentY);
+        ctx.textAlign = 'right';
+
+        currentY += 42;
+      });
+
+      currentY += 12;
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(leftMargin, currentY);
+      ctx.lineTo(rightMargin, currentY);
+      ctx.stroke();
+      currentY += 34;
+    }
+
+    // 6. تفاصيل العملية والتاريخ
+    if (isPartial) {
+      if (t.paidAmount !== undefined) {
+        drawMetaRow('المدفوع نقداً', `${fmt(t.paidAmount, cur.decimal)} ${curLabel}`, true);
+      }
+      if (t.remainingDebt !== undefined) {
+        drawMetaRow('المتبقي كدين', `${fmt(t.remainingDebt, cur.decimal)} ${curLabel} (عليه)`, true);
+      }
+    }
+
+    const descText = t.desc || (isPartial ? 'فاتورة مبيعات جزئية' : (isDebit ? 'دين' : 'سند نقدي'));
+    drawMetaRow('التفاصيل', descText, true);
+
+    const formattedTime = (t.time ? t.time + ' — ' : '') + (t.date || todayISO());
+    drawMetaRow('التاريخ والوقت', formattedTime, false);
+
+    currentY += 16;
+
+    // خط فاصل
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(leftMargin, currentY);
+    ctx.lineTo(rightMargin, currentY);
+    ctx.stroke();
+
+    currentY += 36;
+
+    // 7. صندوق الرصيد بعد العملية (المطابق للصورة)
+    const balBoxHeight = 90;
+    const isBalDebt = balance > 0;
+    const isBalCredit = balance < 0;
+    const balStateText = isBalDebt ? '(عليه)' : (isBalCredit ? '(له)' : '(خالص)');
+    const balColor = isBalDebt ? '#dc2626' : (isBalCredit ? '#059669' : '#4b5563');
+
+    drawRoundedRect(ctx, leftMargin, currentY, contentWidth, balBoxHeight, 16, '#f8fafc', '#e2e8f0', 1.5);
+    
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 26px Tahoma, Arial, sans-serif';
+    ctx.fillText('الرصيد بعد العملية', rightMargin - 28, currentY + 56);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = balColor;
+    ctx.font = 'bold 30px Tahoma, Arial, sans-serif';
+    ctx.fillText(`${fmt(Math.abs(balance), cur.decimal)} ${curLabel} ${balStateText}`, leftMargin + 28, currentY + 56);
+    ctx.textAlign = 'right';
+
+    currentY += balBoxHeight + 54;
+
+    // 8. التذييل السفلي المتطابق مع الصورة
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0f766e';
+    ctx.font = 'bold 24px Tahoma, Arial, sans-serif';
+    ctx.fillText('شكراً لتعاملكم معنا - نتمنى لكم أطيب الأوقات', width / 2, currentY);
+
+    const subBusiness = st.businessName || st.systemName || '';
+    if (subBusiness) {
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '19px Tahoma, Arial, sans-serif';
+      ctx.fillText(subBusiness, width / 2, currentY + 36);
+    }
+
     return canvas.toDataURL('image/png');
   } catch (err) {
     return null;
@@ -725,50 +1013,72 @@ function downloadDataUrl(name, dataUrl) {
   setTimeout(() => a.remove(), 300);
 }
 
-export async function shareTransactionReceipt(t, { automatic = false } = {}) {
+export async function dispatchTransactionNotification(t, { forceChannel = null, waType = null, automatic = false } = {}) {
+  const st = store.settings();
+  const channel = forceChannel || st.notificationChannel || 'whatsapp';
+  const activeWaType = waType || st.whatsappType || 'regular';
+  const autoSend = st.autoSendNotification !== false;
+
+  if (automatic && !autoSend && !forceChannel) {
+    return true; // المستخدم اختار في الإعدادات عدم التوجيه التلقائي
+  }
+
   const acc = t.type === 'transfer' ? store.getAccount(t.fromId) : store.getAccount(t.accountId);
-  const phone = acc && (acc.whatsapp || acc.phone);
-  if (!phone) {
-    toastErr('أضف رقم واتساب أو هاتف العميل أولاً؛ لم يُرسل النص وحده.');
+  const rawPhone = acc && (acc.whatsapp || acc.phone);
+
+  if (!rawPhone) {
+    if (!automatic) toastErr('يرجى إضافة رقم هاتف أو واتساب للعميل لإرسال الإشعار');
     return false;
   }
+
+  // 1. إذا كانت القناة المحددة هي الرسائل النصية SMS
+  if (channel === 'sms') {
+    const smsMessage = transactionSmsText(t);
+    openSMS(rawPhone, smsMessage);
+    toast('تم فتح تطبيق الرسائل القصيرة SMS بنص الإشعار الواضح 💬');
+    return true;
+  }
+
+  // 2. تجهيز صورة السند عالية الجودة والنص المنسق للواتساب والمشاركة
   const image = await generateReceiptImage(t);
-  if (!image) {
-    toastErr('تم حفظ العملية، لكن تعذّر توليد صورة السند؛ لم يُرسل النص وحده. استخدم الطباعة/PDF أو حاول من جهاز يدعم الصور.');
-    return false;
-  }
-  // الاحتفاظ بآخر صورة صحيحة لإعادة استخدامها في المعاينة والنسخ الاحتياطي.
-  try { await store.save('transactions', { ...t, receiptImage: image }, { silent: true, noActivity: true }); } catch (_) {}
   const message = transactionText(t);
-  // في APK المبني بـ Capacitor نستخدم الجسر الأصلي لإرسال الملف إلى واتساب
-  // مع رقم العميل؛ المتصفح يستخدم Web Share كمسار بديل.
+
+  if (image) {
+    try { await store.save('transactions', { ...t, receiptImage: image }, { silent: true, noActivity: true }); } catch (_) {}
+  }
+
+  // 3. دعم Capacitor Native Plugin لواتساب إن وجد في بيئة التطبيق المجمعة
   const nativeShare = globalThis.Capacitor && globalThis.Capacitor.Plugins && globalThis.Capacitor.Plugins.WhatsAppShare;
   if (nativeShare && typeof nativeShare.shareReceipt === 'function') {
     try {
-      await nativeShare.shareReceipt({ phone: String(phone), text: message, dataUrl: image });
+      await nativeShare.shareReceipt({ phone: String(rawPhone), text: message, dataUrl: image });
       toast(automatic ? 'تم حفظ العملية وفتح واتساب مع صورة السند والنص ✅' : 'فُتح واتساب مع صورة السند والنص ✅');
       return true;
-    } catch (_) {
-      // إذا لم يكن واتساب مثبتًا أو أُلغي الإرسال، نجرّب Web Share أو نعرض فشل الإرفاق صراحة.
-    }
+    } catch (_) {}
   }
-  const file = dataUrlToFile(image, `receipt-${t.id || 'transaction'}.png`);
+
+  // 4. إذا كانت القناة هي المشاركة العامة المحددة صراحة
+  const file = image ? dataUrlToFile(image, `receipt-${t.id || 'transaction'}.png`) : null;
   const nav = typeof navigator !== 'undefined' ? navigator : {};
-  try {
-    const canFileShare = file && (typeof nav.canShare !== 'function' || nav.canShare({ files: [file] }));
-    if (file && typeof nav.share === 'function' && canFileShare) {
-      await nav.share({ title: 'سند العملية', text: message, files: [file] });
-      toast(automatic ? 'تم حفظ العملية وإرسال صورة السند والنص للمشاركة عبر واتساب ✅' : 'تمت مشاركة صورة السند والنص ✅');
-      return true;
+
+  if (channel === 'share') {
+    try {
+      if (file && typeof nav.share === 'function' && (typeof nav.canShare !== 'function' || nav.canShare({ files: [file] }))) {
+        await nav.share({ title: 'سند العملية', text: message, files: [file] });
+        toast('تمت مشاركة صورة السند والنص بنجاح ✅');
+        return true;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return false;
     }
-  } catch (err) {
-    if (err && err.name === 'AbortError') {
-      toast('أُلغيَت المشاركة؛ لم يُرسل النص وحده', 'warn');
-      return false;
-    }
-    // نكمل إلى مسار الفشل الصريح أدناه ولا نفتح رابط واتساب نصيًا.
   }
-  downloadDataUrl(`receipt-${t.id || 'transaction'}.png`, image);
-  toastErr('هذا الجهاز لا يدعم إرفاق الصورة مباشرة عبر المشاركة. تم حفظ الصورة، ولم يُرسل النص وحده؛ أرفقها يدويًا في واتساب.');
-  return false;
+
+  // 5. التوجيه المباشر للواتساب وفتح محادثة فورية مع العميل
+  openWhatsApp(rawPhone, message, activeWaType);
+  toast(`تم التوجه المباشر لواتساب ${activeWaType === 'business' ? 'الأعمال' : ''} لفتح محادثة مع العميل 🟢`);
+  return true;
+}
+
+export async function shareTransactionReceipt(t, options = {}) {
+  return dispatchTransactionNotification(t, options);
 }

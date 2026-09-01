@@ -8,7 +8,8 @@
   <title>إدارة البيانات — النظام المحاسبي</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/png" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=2.0" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- شاشة القفل PIN -->
@@ -57,7 +58,7 @@
   <!-- لوحة التطبيق الرئيسية -->
   <div id="app" class="app hidden">
     <header class="topbar">
-      <button class="icon-btn" id="toggle-sidebar" aria-label="القائمة"><span class="ic">☰</span></button>
+      <button class="icon-btn" id="toggle-sidebar" aria-label="القائمة" title="إظهار / إخفاء القائمة الجانبية"><span class="ic">☰</span></button>
       <div class="brand">
         <div class="brand-logo">📊</div>
         <div>
@@ -73,32 +74,52 @@
       </div>
     </header>
 
-    <aside class="sidebar" id="sidebar">
-      <nav class="nav">
-        <a href="#/dashboard" class="nav-item" data-route="dashboard"><span class="ic">📊</span><span>لوحة التحكم</span></a>
-        <a href="#/accounts" class="nav-item" data-route="accounts"><span class="ic">👥</span><span>الحسابات</span></a>
-        <a href="#/inventory" class="nav-item" data-route="inventory"><span class="ic">📦</span><span>المخزون والأصناف</span></a>
-        <a href="#/transactions" class="nav-item" data-route="transactions"><span class="ic">💸</span><span>العمليات المالية</span></a>
-        <a href="#/vouchers" class="nav-item" data-route="vouchers"><span class="ic">🧾</span><span>السندات</span></a>
-        <a href="#/reports" class="nav-item" data-route="reports"><span class="ic">📈</span><span>التقارير</span></a>
-        <a href="#/currencies" class="nav-item" data-route="currencies"><span class="ic">💱</span><span>العملات</span></a>
-        <a href="#/chat" class="nav-item" data-route="chat"><span class="ic">💬</span><span>المراسلات <span class="badge" id="chat-badge" hidden>0</span></span></a>
-        <a href="#/activity" class="nav-item" data-route="activity"><span class="ic">🕒</span><span>سجل النشاط</span></a>
-        <a href="#/users" class="nav-item" data-route="users"><span class="ic">🛡️</span><span>المستخدمون والصلاحيات</span></a>
-        <a href="#/backup" class="nav-item" data-route="backup"><span class="ic">💾</span><span>النسخ الاحتياطي</span></a>
-        <a href="#/settings" class="nav-item" data-route="settings"><span class="ic">⚙️</span><span>الإعدادات</span></a>
-      </nav>
-      <div class="sidebar-foot">
-        <button class="btn support" id="btn-support"><span class="ic">🛟</span> خدمة العملاء</button>
-      </div>
-    </aside>
+    <div class="app-body">
+      <!-- خلفية معتمة للقائمة على الشاشات المتوسطة والصغيرة -->
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-    <main class="main" id="view"></main>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head-mobile">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:20px">📊</span>
+            <span class="brand-title">إدارة البيانات</span>
+          </div>
+          <button class="icon-btn sm" id="btn-close-sidebar" title="إغلاق القائمة">✕</button>
+        </div>
+        <nav class="nav">
+          <a href="#/dashboard" class="nav-item" data-route="dashboard"><span class="ic">📊</span><span>لوحة التحكم</span></a>
+          <a href="#/pos" class="nav-item" data-route="pos"><span class="ic">🛒</span><span>المبيعات ونقاط البيع</span></a>
+          <a href="#/accounts" class="nav-item" data-route="accounts"><span class="ic">👥</span><span>الحسابات</span></a>
+          <a href="#/inventory" class="nav-item" data-route="inventory"><span class="ic">📦</span><span>المخزون والأصناف</span></a>
+          <a href="#/transactions" class="nav-item" data-route="transactions"><span class="ic">💸</span><span>العمليات المالية</span></a>
+          <a href="#/vouchers" class="nav-item" data-route="vouchers"><span class="ic">🧾</span><span>السندات</span></a>
+          <a href="#/reports" class="nav-item" data-route="reports"><span class="ic">📈</span><span>التقارير</span></a>
+          <a href="#/currencies" class="nav-item" data-route="currencies"><span class="ic">💱</span><span>العملات</span></a>
+          <a href="#/chat" class="nav-item" data-route="chat"><span class="ic">💬</span><span>المراسلات <span class="badge" id="chat-badge" hidden>0</span></span></a>
+          <a href="#/activity" class="nav-item" data-route="activity"><span class="ic">🕒</span><span>سجل النشاط</span></a>
+          <a href="#/users" class="nav-item" data-route="users"><span class="ic">🛡️</span><span>المستخدمون والصلاحيات</span></a>
+          <a href="#/backup" class="nav-item" data-route="backup"><span class="ic">💾</span><span>النسخ الاحتياطي</span></a>
+          <a href="#/settings" class="nav-item" data-route="settings"><span class="ic">⚙️</span><span>الإعدادات</span></a>
+        </nav>
+        <div class="sidebar-foot">
+          <button class="btn support" id="btn-support"><span class="ic">🛟</span> خدمة العملاء</button>
+        </div>
+      </aside>
+
+      <main class="main" id="view"></main>
+    </div>
+
+    <!-- زر نظام المبيعات العائم في أسفل يسار الشاشة -->
+    <button class="pos-fab" id="btn-pos-fab" title="نظام المبيعات ونقاط البيع">
+      <span class="pos-fab-ic">🛒</span>
+      <span class="pos-fab-label">نظام المبيعات</span>
+    </button>
 
     <!-- زر إضافة سريع عائم -->
     <div class="fab-wrap">
       <button class="fab" id="fab-add" title="إضافة سريعة">＋</button>
       <div class="fab-menu hidden" id="fab-menu">
+        <button class="fab-item" data-act="pos"><span>🛒</span> نقطة بيع / مبيعات</button>
         <button class="fab-item" data-act="account"><span>👤</span> حساب</button>
         <button class="fab-item" data-act="transaction"><span>💸</span> عملية</button>
         <button class="fab-item" data-act="voucher"><span>🧾</span> سند</button>
@@ -109,6 +130,6 @@
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=2.0"></script>
 </body>
 </html>
