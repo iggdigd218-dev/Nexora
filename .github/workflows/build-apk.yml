@@ -40,6 +40,22 @@ jobs:
         run: |
           CI=true npx @capacitor/cli sync android
 
+      - name: Fix Android Kotlin Duplicate Classes
+        run: |
+          cat << 'GRADLE_EOF' >> android/app/build.gradle
+          configurations.all {
+              resolutionStrategy {
+                  eachDependency { DependencyResolveDetails details ->
+                      if (details.requested.group == 'org.jetbrains.kotlin') {
+                          if (details.requested.name == 'kotlin-stdlib-jdk7' || details.requested.name == 'kotlin-stdlib-jdk8') {
+                              details.useTarget("org.jetbrains.kotlin:kotlin-stdlib:1.8.22")
+                          }
+                      }
+                  }
+              }
+          }
+          GRADLE_EOF
+
       - name: Make Gradlew executable
         run: chmod +x android/gradlew
 
