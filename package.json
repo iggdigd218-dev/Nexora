@@ -1,6 +1,6 @@
 {
   "name": "e4-data-accounting",
-  "version": "1.0.0",
+  "version": "3.4.0",
   "description": "إدارة البيانات — تطبيق محاسبي عربي متكامل (ويب + أندرويد)",
   "type": "module",
   "private": true,
