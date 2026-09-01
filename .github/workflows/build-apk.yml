@@ -69,3 +69,20 @@ jobs:
           name: nexora-app-debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Nexora Release v1.0.${{ github.run_number }}
+          body: |
+            ## Nexora Android APK Release
+            تم بناء التطبيق بنجاح!
+            - **الملف**: `app-debug.apk`
+            - تاريخ الإصدار: ${{ github.event.head_commit.timestamp }}
+          files: android/app/build/outputs/apk/debug/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
