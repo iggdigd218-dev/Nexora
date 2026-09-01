@@ -6,11 +6,12 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "node -e \"console.log('Build complete')\"",
+    "build": "node scripts/prepare-www.js",
+    "build:www": "node scripts/prepare-www.js",
     "test": "node test/smoke.mjs && node test/dom.mjs",
     "start": "node server.js",
-    "sync:android": "npm install && npx cap sync android",
-    "build:android": "cd android && ./gradlew assembleRelease"
+    "sync:android": "npm run build:www && npx cap sync android",
+    "build:android": "npm run sync:android && cd android && ./gradlew assembleDebug"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.0",
