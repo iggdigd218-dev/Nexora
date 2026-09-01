@@ -4,6 +4,8 @@
   "description": "إدارة البيانات — تطبيق محاسبي عربي متكامل (ويب + أندرويد)",
   "private": true,
   "scripts": {
+    "dev": "node server.js",
+    "build": "node -e \"console.log('Build complete')\"",
     "test": "node test/smoke.mjs && node test/dom.mjs",
     "start": "node server.js",
     "sync:android": "npm install && npx cap sync android",

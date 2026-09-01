@@ -1,0 +1,6 @@
+{
+  "name": "إدارة البيانات — النظام المحاسبي",
+  "description": "نظام محاسبي عربي متكامل لإدارة الحسابات والعملاء والموردين والديون والعمليات المالية والسندات والمخزون",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
