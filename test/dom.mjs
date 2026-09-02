@@ -172,8 +172,8 @@ try {
     ok('balance = 700 after edit via UI', bal2 === 700);
 
   // 4) اختبار نظام المبيعات ونقاط البيع (POS) والمبيعات الآجلة والجزئية وربط الديون والمخزون
-  const posFab = document.getElementById('btn-pos-fab');
-  ok('POS bottom-left fab button exists', !!posFab);
+  const posBtn = document.getElementById('btn-pos-topbar') || document.querySelector('[data-act="pos"]');
+  ok('POS access button exists in UI', !!posBtn);
 
   window.location.hash = '#/pos';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));

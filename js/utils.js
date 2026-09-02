@@ -192,45 +192,24 @@ export function cleanPhoneNumber(phone, defaultCountry = '967') {
 
 export function openWhatsApp(phone, text, appType = 'regular') {
   const p = cleanPhoneNumber(phone);
+  if (!p) return;
   const encoded = encodeURIComponent(text || '');
-  if (appType === 'business') {
-    // محاولة فتح واتساب للأعمال مباشرة
-    const bUrl = `whatsapp://send?phone=${p}&text=${encoded}`;
-    try {
-      window.location.href = bUrl;
-      setTimeout(() => {
-        try {
-          const a = document.createElement('a');
-          a.href = `https://wa.me/${p}?text=${encoded}`;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => a.remove(), 400);
-        } catch (_) {
-          window.open(`https://wa.me/${p}?text=${encoded}`, '_blank');
-        }
-      }, 700);
-      return;
-    } catch (_) {}
-  }
   
-  if (appType === 'intent') {
-    window.location.href = `whatsapp://send?phone=${p}&text=${encoded}`;
-    return;
-  }
-  
-  const url = `https://wa.me/${p}?text=${encoded}`;
+  // الرابط العالمي المباشر لفتح محادثة الرقم المحدد فوراً دون وسيط
+  const directChatUrl = `https://api.whatsapp.com/send?phone=${p}&text=${encoded}`;
+  const appSchemeUrl = `whatsapp://send?phone=${p}&text=${encoded}`;
+
   try {
+    // فتح محادثة العميل مباشرة في واتساب
     const a = document.createElement('a');
-    a.href = url;
+    a.href = directChatUrl;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => a.remove(), 400);
+    setTimeout(() => a.remove(), 300);
   } catch (_) {
-    window.open(url, '_blank');
+    window.location.href = appSchemeUrl;
   }
 }
 
