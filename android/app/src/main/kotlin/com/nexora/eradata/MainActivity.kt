@@ -15,7 +15,6 @@ import java.io.File
  * تتطلّب FragmentActivity لعرض نافذة المصادقة، وبدونها لا تعمل البصمة.
  */
 class MainActivity : FlutterFragmentActivity() {
-
     private val waChannel = "nexora/whatsapp"
     private val waPackages = listOf("com.whatsapp", "com.whatsapp.w4b")
 
@@ -45,14 +44,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
     /**
-     * يفتح محادثة الرقم مباشرة داخل واتساب مع الصورة والنص، بلا نافذة مشاركة.
-     *
-     * سلسلة المحاولات ضرورية لأن إصدارات واتساب تختلف في دعم jid والمرفقات.
-     * نبدأ بمشاركة الصورة والنص داخل الحزمة مع jid، ثم ContactPicker، ثم بلا jid،
-     * وأخيرًا نافذة مشاركة أندرويد. لا نستخدم رابط wa.me عند وجود صورة لأنه
-     * يرسل النص فقط.
-     *
-     * ClipData ضرورية: راية منح القراءة لا تسري على EXTRA_STREAM وحدها.
+     * يفتح محادثة الرقم مباشرة داخل واتساب مع الصورة والنص دون تكرار أو نوافذ اختيار متعددة.
      */
     private fun send(phone: String, text: String, path: String?, pkg: String?): String {
         val digits = phone.filter { it.isDigit() }
@@ -66,36 +58,30 @@ class MainActivity : FlutterFragmentActivity() {
             ?.takeIf { it.exists() && it.length() > 0L }
             ?.let { src -> copyToShared(src) }
 
-        // عند وجود صورة لا نرجع إلى رابط wa.me النصي؛ الرابط يفقد المرفق.
-        // نجرّب عدة صيغ مشاركة لأن إصدارات واتساب تختلف في دعم jid.
         if (file != null) {
             val uri: Uri = try {
                 FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             } catch (e: Exception) {
                 return "image_failed"
             }
+
             val jid = "$digits@s.whatsapp.net"
             grantUriPermission(target, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            // الصيغة الأولى: واتساب داخل الحزمة مع رقم المحادثة.
+            // 1. فتح واتساب المحدد مباشرة مع رقم المحادثة والمرفق
             val withJid = imageIntent(target, uri, text, jid, includeJid = true)
             if (launch(withJid)) return "ok"
 
-            // بعض إصدارات واتساب تحتاج ContactPicker للوصول المباشر للمحادثة.
+            // 2. محاولة عبر ContactPicker للحزمة المحددة
             val direct = imageIntent(target, uri, text, jid, includeJid = true).apply {
                 setClassName(target, "com.whatsapp.ContactPicker")
             }
             if (launch(direct)) return "ok"
 
-            // مشاركة الصورة والنص داخل واتساب دون jid.
+            // 3. مشاركة الصورة والنص داخل الحزمة المحددة فقط دون تعميم
             val plain = imageIntent(target, uri, text, jid, includeJid = false)
             if (launch(plain)) return "ok"
 
-            // احتياط أخير: نافذة مشاركة أندرويد، مع الحفاظ على الصورة والنص.
-            val chooserSource = imageIntent(null, uri, text, jid, includeJid = false)
-            if (launch(Intent.createChooser(chooserSource, "إرسال سند العملية"))) return "ok"
-
-            // لا نرسل النص وحده؛ على Dart فتح مشاركة بديلة بالصورة والنص.
             return "image_failed"
         }
 
@@ -122,20 +108,28 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun sendTextOnly(digits: String, text: String, target: String): String {
-        val viaLink = Intent(Intent.ACTION_VIEW).apply {
-            data = Uri.parse("https://wa.me/$digits?text=" + Uri.encode(text))
+        val encoded = Uri.encode(text)
+        
+        // 1. الرابط المباشر للواجهة البرمجية لواتساب بالحزمة المحددة
+        val directApi = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=$digits&text=$encoded")).apply {
+            setPackage(target)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (launch(directApi)) return "ok"
+
+        // 2. المخطط المباشر whatsapp:// بالحزمة المحددة
+        val schemeIntent = Intent(Intent.ACTION_VIEW, Uri.parse("whatsapp://send?phone=$digits&text=$encoded")).apply {
+            setPackage(target)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (launch(schemeIntent)) return "ok"
+
+        // 3. رابط wa.me المباشر
+        val viaLink = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits?text=$encoded")).apply {
             setPackage(target)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         if (launch(viaLink)) return "ok"
-
-        val viaSendTo = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("smsto:$digits")
-            setPackage(target)
-            putExtra(Intent.EXTRA_TEXT, text)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        if (launch(viaSendTo)) return "ok"
 
         return "error:تعذّر فتح المحادثة"
     }
