@@ -25,8 +25,8 @@ export async function getFirebaseConfig() {
     console.warn('Failed to load firebase-applet-config.json', e);
   }
   return {
-    oAuthClientId: '427793881806-heq9105s544ul68tqo2ha1t3fa5r43ci.apps.googleusercontent.com',
-    projectId: 'gen-lang-client-0219241493',
+    oAuthClientId: '872578554938-tf394quhikb2j0s6tsh767qbmlsj27of.apps.googleusercontent.com',
+    projectId: 'gen-lang-client-0664934650',
   };
 }
 
