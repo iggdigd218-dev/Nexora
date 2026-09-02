@@ -91,7 +91,7 @@ class GoogleDriveService {
       'https://www.googleapis.com/auth/drive.appdata';
 
   static const String _serverClientId =
-      '427793881806-heq9105s544ul68tqo2ha1t3fa5r43ci.apps.googleusercontent.com';
+      '872578554938-tf394quhikb2j0s6tsh767qbmlsj27of.apps.googleusercontent.com';
 
   final GoogleSignIn _signIn = GoogleSignIn(
     serverClientId: _serverClientId,
