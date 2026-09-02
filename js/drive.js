@@ -24,7 +24,10 @@ export async function getFirebaseConfig() {
   } catch (e) {
     console.warn('Failed to load firebase-applet-config.json', e);
   }
-  return null;
+  return {
+    oAuthClientId: '427793881806-heq9105s544ul68tqo2ha1t3fa5r43ci.apps.googleusercontent.com',
+    projectId: 'gen-lang-client-0219241493',
+  };
 }
 
 // استرجاع معلومات الحساب المحفوظة محلياً إن وجدت
@@ -88,13 +91,24 @@ export async function authenticateGoogleAccount(interactive = true) {
 
 function initGISFlow(clientId, interactive, resolve, reject) {
   try {
+    if (!clientId) {
+      reject(new Error('معرّف تطبيق Google OAuth Client ID غير موجود.'));
+      return;
+    }
+
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
       callback: async (response) => {
         if (response.error) {
           console.error('GIS Error:', response);
-          reject(new Error(response.error_description || response.error || 'تم إلغاء المصادقة من قبل المستخدم'));
+          if (response.error === 'popup_closed_by_user') {
+            reject(new Error('تم إغلاق نافذة تسجيل الدخول من قبل المستخدم.'));
+          } else if (response.error === 'access_denied') {
+            reject(new Error('تم رفض إعطاء الصلاحيات لحفظ النسخة في Google Drive.'));
+          } else {
+            reject(new Error(response.error_description || response.error || 'تم إلغاء المصادقة من قبل المستخدم'));
+          }
           return;
         }
         if (response.access_token) {
@@ -109,7 +123,7 @@ function initGISFlow(clientId, interactive, resolve, reject) {
               const accData = {
                 id: profile.id,
                 email: profile.email,
-                name: profile.name,
+                name: profile.name || profile.email,
                 picture: profile.picture,
                 connectedAt: new Date().toISOString(),
               };
@@ -126,6 +140,10 @@ function initGISFlow(clientId, interactive, resolve, reject) {
           resolve({ token: inMemoryAccessToken, user: basicAcc });
         }
       },
+      error_callback: (err) => {
+        console.error('GIS Token Client Error Callback:', err);
+        reject(new Error(err?.message || 'تعذّر فتح نافذة مصادقة Google (تأكد من السماح بالنوافذ المنبثقة).'));
+      }
     });
 
     if (interactive) {
