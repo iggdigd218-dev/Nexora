@@ -317,6 +317,25 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     }
   }
 
+  Future<void> _shareToDriveDirectly() async {
+    setState(() => _busy = true);
+    try {
+      final file = await _createBackupFile();
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'نسخة احتياطية سحابية — Google Drive',
+      );
+      if (mounted) {
+        showSnack(context, 'تم تجهيز النسخة لمشاركتها وحفظها في Google Drive ☁️');
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر تصدير النسخة: ', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final counts = ref.watch(countsProvider).valueOrNull ?? {};
@@ -543,6 +562,15 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                     ),
                   ),
                 ],
+                                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _busy ? null : _shareToDriveDirectly,
+                    icon: const Icon(Icons.drive_folder_upload_outlined),
+                    label: const Text('رفع / حفظ في تطبيق Google Drive 📤'),
+                  ),
+                ),
                 if (_busy) ...[
                   const SizedBox(height: 10),
                   const LinearProgressIndicator(),

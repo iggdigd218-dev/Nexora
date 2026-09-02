@@ -1,12 +1,9 @@
 import 'dart:convert';
 import 'dart:io' as io;
-
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 
 /// معلومات تعريفية للحساب المرتبط فقط.
-///
-/// لا نحتفظ هنا بـ access token ولا نكتبه إلى قاعدة البيانات أو الإعدادات.
 class GoogleAccountInfo {
   final String id;
   final String email;
@@ -21,7 +18,7 @@ class GoogleAccountInfo {
   });
 }
 
-/// بيانات آخر نسخة محفوظة في مجلد بيانات التطبيق في Drive.
+/// بيانات آخر نسخة محفوظة في Drive.
 class GoogleDriveBackupInfo {
   final String name;
   final DateTime? modifiedTime;
@@ -46,7 +43,6 @@ class GoogleDriveBackupInfo {
 
 class GoogleDriveException implements Exception {
   final String message;
-
   const GoogleDriveException(this.message);
 
   @override
@@ -55,7 +51,7 @@ class GoogleDriveException implements Exception {
 
 class GoogleDriveBackupNotFoundException extends GoogleDriveException {
   const GoogleDriveBackupNotFoundException()
-    : super('لا توجد نسخة احتياطية لنكسورا في حساب Google المرتبط.');
+      : super('لا توجد نسخة احتياطية لنكسورا في حساب Google المرتبط.');
 }
 
 class _DriveFile {
@@ -72,20 +68,15 @@ class _DriveFile {
   });
 
   GoogleDriveBackupInfo toPublicInfo() => GoogleDriveBackupInfo(
-    name: name,
-    modifiedTime: modifiedTime,
-    sizeBytes: sizeBytes,
-  );
+        name: name,
+        modifiedTime: modifiedTime,
+        sizeBytes: sizeBytes,
+      );
 }
 
-/// عميل Google Sign-In وDrive.
-///
-/// يستخدم نطاق `drive.appdata` فقط، لذلك لا يطلب الوصول إلى ملفات المستخدم
-/// العادية في Drive. تُستعمل واجهة Drive REST مباشرة عبر عميل HTTP مؤقت؛ كل
-/// ترويسة OAuth تُجلب عند الطلب ولا يُخزَّن access token محليًا.
+/// عميل Google Sign-In و Google Drive.
 class GoogleDriveService {
   GoogleDriveService._();
-
   static final GoogleDriveService instance = GoogleDriveService._();
 
   static const String backupFileName = 'nexora-backup-latest.nexora';
@@ -93,11 +84,24 @@ class GoogleDriveService {
   static const String _driveBasePath = '/drive/v3';
   static const String _uploadBasePath = '/upload/drive/v3';
   static const String _mimeType = 'application/json';
-  static const String _driveScope =
-      'https://www.googleapis.com/auth/drive.appdata';
-  static const String _fileFields = 'id,name,modifiedTime,size';
 
-  final GoogleSignIn _signIn = GoogleSignIn(scopes: [_driveScope]);
+  static const String _driveScope =
+      'https://www.googleapis.com/auth/drive.file';
+  static const String _driveAppDataScope =
+      'https://www.googleapis.com/auth/drive.appdata';
+
+  static const String _serverClientId =
+      '427793881806-heq9105s544ul68tqo2ha1t3fa5r43ci.apps.googleusercontent.com';
+
+  final GoogleSignIn _signIn = GoogleSignIn(
+    serverClientId: _serverClientId,
+    scopes: [
+      _driveScope,
+      _driveAppDataScope,
+      'email',
+      'profile',
+    ],
+  );
 
   /// يستعيد جلسة Google السابقة بصمت إن كانت موجودة.
   Future<GoogleAccountInfo?> restoreSession() async {
@@ -107,7 +111,7 @@ class GoogleDriveService {
           await _signIn.signInSilently(suppressErrors: true);
       return account == null ? null : _toAccountInfo(account);
     } catch (e) {
-      throw GoogleDriveException('تعذّر التحقق من حساب Google: $e');
+      return null;
     }
   }
 
@@ -117,11 +121,17 @@ class GoogleDriveService {
       final account = _signIn.currentUser ?? await _signIn.signIn();
       return account == null ? null : _toAccountInfo(account);
     } catch (e) {
+      final str = e.toString();
+      if (str.contains('10') || str.contains('DEVELOPER_ERROR') || str.contains('sign_in_failed')) {
+        throw const GoogleDriveException(
+          'تعذّر تسجيل الدخول التلقائي عبر Google Sign-In المباشر. يمكنك استخدام خيار "رفع إلى Google Drive عبر تطبيق Drive" في الأسفل.',
+        );
+      }
       throw GoogleDriveException('تعذّر ربط حساب Google: $e');
     }
   }
 
-  /// تسجيل خروج محلي من جلسة Google. لا توجد بيانات اعتماد محفوظة في Nexora.
+  /// تسجيل خروج محلي من جلسة Google.
   Future<void> signOut() async {
     try {
       await _signIn.signOut();
@@ -130,7 +140,7 @@ class GoogleDriveService {
     }
   }
 
-  /// فصل الحساب وإلغاء المنح السابقة حتى يمكن ربط حساب آخر بوضوح.
+  /// فصل الحساب وإلغاء المنح السابقة.
   Future<void> disconnect() async {
     try {
       await _signIn.disconnect();
@@ -151,7 +161,6 @@ class GoogleDriveService {
     if (!await localFile.exists()) {
       throw const GoogleDriveException('ملف النسخة المحلي غير موجود.');
     }
-
     final bytes = await localFile.readAsBytes();
     return _withDrive((client, headers) async {
       var existing = await _findBackup(client, headers);
@@ -165,16 +174,13 @@ class GoogleDriveService {
         final updated = await _uploadContent(client, headers, existing, bytes);
         return updated.toPublicInfo();
       } catch (_) {
-        // لا نترك ملفًا فارغًا إذا فشل رفع محتواه بعد إنشاء metadata.
         if (newlyCreatedId != null) {
           try {
             await client.delete(
               _fileUri('/files/$newlyCreatedId'),
               headers: headers,
             );
-          } catch (_) {
-            // سيظهر الخطأ الأصلي للمستخدم، ويمكن تحديث الملف في المحاولة التالية.
-          }
+          } catch (_) {}
         }
         rethrow;
       }
@@ -186,7 +192,6 @@ class GoogleDriveService {
     return _withDrive((client, headers) async {
       final file = await _findBackup(client, headers);
       if (file == null) throw const GoogleDriveBackupNotFoundException();
-
       final response = await client.get(
         _fileUri('/files/${Uri.encodeComponent(file.id)}', {'alt': 'media'}),
         headers: headers,
@@ -203,36 +208,60 @@ class GoogleDriveService {
     http.Client client,
     Map<String, String> headers,
   ) async {
-    final response = await client.get(
-      _fileUri('/files', {
-        'spaces': 'appDataFolder',
-        'q': "name = '$backupFileName' and trashed = false",
-        'orderBy': 'modifiedTime desc',
-        'pageSize': '10',
-        'fields': 'files($_fileFields)',
-      }),
-      headers: headers,
-    );
-    _ensureSuccess(response, 'البحث عن نسخة Google Drive');
+    // 1. البحث في مجلد التطبيق appDataFolder
+    try {
+      final response = await client.get(
+        _fileUri('/files', {
+          'spaces': 'appDataFolder',
+          'q': "name = '$backupFileName' and trashed = false",
+          'orderBy': 'modifiedTime desc',
+          'pageSize': '10',
+          'fields': 'files($_fileFields)',
+        }),
+        headers: headers,
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['files'] is List && (decoded['files'] as List).isNotEmpty) {
+          final first = (decoded['files'] as List).first;
+          if (first is Map && first['id'] is String) {
+            return _driveFileFromJson(first);
+          }
+        }
+      }
+    } catch (_) {}
 
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      throw const GoogleDriveException('استجابة Google Drive غير صالحة.');
-    }
-    final list = decoded['files'];
-    if (list is! List || list.isEmpty) return null;
-    final first = list.first;
-    if (first is! Map || first['id'] is! String) {
-      throw const GoogleDriveException('بيانات ملف النسخة غير مكتملة.');
-    }
-    return _driveFileFromJson(first);
+    // 2. البحث العام في المساحة العادية للـ Drive
+    try {
+      final response = await client.get(
+        _fileUri('/files', {
+          'q': "name = '$backupFileName' and trashed = false",
+          'orderBy': 'modifiedTime desc',
+          'pageSize': '10',
+          'fields': 'files($_fileFields)',
+        }),
+        headers: headers,
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['files'] is List && (decoded['files'] as List).isNotEmpty) {
+          final first = (decoded['files'] as List).first;
+          if (first is Map && first['id'] is String) {
+            return _driveFileFromJson(first);
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   Future<_DriveFile> _createMetadata(
     http.Client client,
     Map<String, String> headers,
   ) async {
-    final response = await client.post(
+    // محاولة الإنشاء داخل appDataFolder أولاً
+    var response = await client.post(
       _fileUri('/files', {'fields': _fileFields}),
       headers: {...headers, 'Content-Type': 'application/json; charset=utf-8'},
       body: jsonEncode({
@@ -241,6 +270,19 @@ class GoogleDriveService {
         'parents': ['appDataFolder'],
       }),
     );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      // إنشاء بدون تحديد مجلد خاص
+      response = await client.post(
+        _fileUri('/files', {'fields': _fileFields}),
+        headers: {...headers, 'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode({
+          'name': backupFileName,
+          'mimeType': _mimeType,
+        }),
+      );
+    }
+
     _ensureSuccess(response, 'إنشاء ملف النسخة');
     return _parseFileResponse(response, 'إنشاء ملف النسخة');
   }
@@ -301,7 +343,6 @@ class GoogleDriveService {
         'اربط حساب Google أولًا لاستخدام النسخ السحابي.',
       );
     }
-
     final headers = await signedIn.authHeaders;
     final client = http.Client();
     try {
